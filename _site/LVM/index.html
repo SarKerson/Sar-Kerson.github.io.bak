@@ -1,0 +1,448 @@
+
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+
+<meta charset="utf-8">
+
+
+
+<!-- begin SEO -->
+
+
+
+
+
+
+
+
+
+<title>Linux LVM逻辑卷的配置 - tianshan’s blog</title>
+
+
+
+
+
+
+
+<meta property="og:locale" content="en-US">
+<meta property="og:site_name" content="tianshan's blog">
+<meta property="og:title" content="Linux LVM逻辑卷的配置">
+
+
+  <link rel="canonical" href="http://tianshan.github.io/LVM/">
+  <meta property="og:url" content="http://tianshan.github.io/LVM/">
+
+
+
+  <meta property="og:description" content="LVM全程Logical Volume Manager 逻辑卷管理器，是Linux对磁盘分区进行管理的一种机制，是建立在硬盘和分区之上、文件系统之下的一个逻辑层，可提高磁盘分区管理的灵活性。要创建逻辑卷，首先要创建物理卷PV（Physical Volume），然后卷组VG（Volume Group），最后逻辑卷LV（Logical Volume）。">
+
+
+
+
+
+  
+
+  
+
+
+
+
+
+  <meta property="og:type" content="article">
+  <meta property="article:published_time" content="2015-03-04T00:00:00+08:00">
+  
+    <link rel="next" href="http://tianshan.github.io/blog-highlight/" title="jekyll 语法高亮">
+  
+  
+    <link rel="prev" href="http://tianshan.github.io/ceph-deploy/" title="Ceph 源码部署">
+  
+
+
+
+
+
+  <script type="application/ld+json">
+    {
+      "@context" : "http://schema.org",
+      "@type" : "person",
+      "name" : "tianshan",
+      "url" : "http://tianshan.github.io",
+      "sameAs" : null
+    }
+  </script>
+
+
+
+
+
+
+<!-- end SEO -->
+
+<link href="http://tianshan.github.io/feed.xml" type="application/atom+xml" rel="alternate" title="tianshan's blog Feed">
+
+<!-- http://t.co/dKP3o1e -->
+<meta name="HandheldFriendly" content="True">
+<meta name="MobileOptimized" content="320">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="http://tianshan.github.io/assets/css/main.css">
+
+<meta http-equiv="cleartype" content="on">
+    <!-- start custom head snippets -->
+
+<!-- insert favicons. use http://realfavicongenerator.net/ -->
+
+<!-- end custom head snippets -->
+  </head>
+
+  <body>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="http://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        <button><div class="navicon"></div></button>
+        <ul class="visible-links">
+          <li class="masthead__menu-item masthead__menu-item--lg"><a href="http://tianshan.github.io/">tianshan's blog</a></li>
+          
+            
+            <li class="masthead__menu-item"><a href="http://tianshan.github.io/about/">About</a></li>
+          
+        </ul>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+    
+
+
+
+
+
+<div id="main" role="main">
+  
+
+
+  <div class="sidebar sticky">
+  
+
+
+
+<div itemscope itemtype="http://schema.org/Person">
+
+  <div class="author__avatar">
+    
+    	<img src="http://tianshan.github.io/images/ts.jpg" class="author__avatar" alt="tianshan">
+    
+  </div>
+
+  <div class="author__content">
+    <h3 class="author__name">tianshan</h3>
+    <p class="author__bio">笔记</p>
+  </div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">Follow</button>
+    <ul class="author__urls social-icons">
+      
+        <li><i class="fa fa-fw fa-map-marker" aria-hidden="true"></i> Somewhere</li>
+      
+      
+      
+        <li><a href="mailto:qutianshan0214@163.com"><i class="fa fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+        <li><a href="https://github.com/tianshan"><i class="fa fa-fw fa-github" aria-hidden="true"></i> Github</a></li>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="http://schema.org/CreativeWork">
+    <meta itemprop="headline" content="Linux LVM逻辑卷的配置">
+    <meta itemprop="description" content="LVM全程Logical Volume Manager 逻辑卷管理器，是Linux对磁盘分区进行管理的一种机制，是建立在硬盘和分区之上、文件系统之下的一个逻辑层，可提高磁盘分区管理的灵活性。要创建逻辑卷，首先要创建物理卷PV（Physical Volume），然后卷组VG（Volume Group），最后逻辑卷LV（Logical Volume）。">
+    <meta itemprop="datePublished" content="March 04, 2015">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+          <h1 class="page__title" itemprop="headline">Linux LVM逻辑卷的配置
+</h1>
+          
+        </header>
+      
+
+      <section class="page__content" itemprop="text">
+        <p>LVM全程Logical Volume Manager 逻辑卷管理器，是Linux对磁盘分区进行管理的一种机制，是建立在硬盘和分区之上、文件系统之下的一个逻辑层，可提高磁盘分区管理的灵活性。
+要创建逻辑卷，首先要创建物理卷PV（Physical Volume），然后卷组VG（Volume Group），最后逻辑卷LV（Logical Volume）。</p>
+
+<!--more-->
+
+<p>Ceph的单机版本部署参考<a href="http://blog.coolceph.com/?p=85">博客</a>，为集群准备OSD空间。
+注意，分配的OSD空间要大于配置文件Ceph.conf中 <code class="highlighter-rouge">osd journal size</code>  ，单位为MB。</p>
+
+<h2 id="lvm">创建LVM</h2>
+
+<h3 id="section">准备磁盘空间， 这一步使用逻辑卷进行操作</h3>
+<ol>
+  <li>准备空闲分区为： 我的ubuntu在虚拟机，通过扩容后新建分区（可以通过fdisk命令） /dev/sda3</li>
+  <li>创建物理卷：
+ pvcreate /dev/sda3
+    <ul>
+      <li>参数： <code class="highlighter-rouge">pvcreate 物理卷</code></li>
+      <li>用于将物理硬盘分区初始化为物理卷，以便被LVM使用，需要空闲分区。</li>
+    </ul>
+  </li>
+  <li>创建LVM卷组：
+ vgcreate ceph /dev/sda3
+    <ul>
+      <li>参数： <code class="highlighter-rouge">vgcreate 卷组名 物理卷列表</code></li>
+      <li>将多个物理卷组织成一个整体，屏蔽了底层物理卷细节。在卷组创建逻辑卷时不用考虑具体的物理卷信息。</li>
+    </ul>
+  </li>
+  <li>
+    <p>创建三个LVM的逻辑卷， 分别用于创建三个osd</p>
+
+    <p>lvcreate -n 逻辑卷名 -L 逻辑卷大小 逻辑卷
+ sudo lvcreate -n osd.0 -L 1G ceph
+ sudo lvcreate -n osd.1 -L 1G ceph
+ sudo lvcreate -n osd.2 -L 1G ceph</p>
+  </li>
+</ol>
+
+<h2 id="lvm-1">扩展LVM</h2>
+
+<p>要确保逻辑卷所在卷组有足够的空闲空间可用。先扩展物理边界，再扩展逻辑边界。</p>
+
+<ol>
+  <li>
+    <p>扩展物理边界</p>
+
+    <p>sudo lvextend -L 2G /dev/ceph/osd.0</p>
+
+    <p>输入命令 <code class="highlighter-rouge">lvs</code> 时，已经可以看到大小已经变为2G。
+ 注意，-L后的大小是扩展到的大小，不是多增的大小。</p>
+  </li>
+  <li>
+    <p>扩展逻辑边界</p>
+
+    <p>sudo resize2fs /dev/ceph/osd.0</p>
+
+    <p>注意</p>
+
+    <ul>
+      <li>resize2fs 工具只适用于 <code class="highlighter-rouge">ext2、ext3、ext4</code> .</li>
+      <li>xfs 系统可以使用 xfs_growfs</li>
+      <li>btrfs系统可以使用 <code class="highlighter-rouge">sudo btrfs filesystem resize [+/-]&lt;newsize&gt;[gkm]|max &lt;path&gt;</code> ，其中<path>为挂在后的路径</path></li>
+    </ul>
+  </li>
+</ol>
+
+<h2 id="section-1">删除逻辑卷</h2>
+
+<p>lvremove [选项] [参数]</p>
+
+<ul>
+  <li>选项</li>
+</ul>
+
+<p>-f 强制删除</p>
+
+<ul>
+  <li>参数</li>
+</ul>
+
+<p>逻辑卷 指定要删除的逻辑卷</p>
+
+<p>注意，如果逻辑卷已经mount，需要先umount，如果出现设备忙，可以加上选项 -l</p>
+
+        
+      </section>
+
+      <footer class="page__meta">
+        
+        
+
+
+  
+
+
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fa fa-fw fa-tags" aria-hidden="true"></i> Tags: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="http://tianshan.github.io/tags/#lvm" class="page__taxonomy-item" rel="tag">lvm</a>
+    
+    </span>
+  </p>
+
+
+
+
+        
+          <p class="page__date"><strong><i class="fa fa-fw fa-calendar" aria-hidden="true"></i> Updated:</strong> <time datetime="2015-03-04T00:00:00+08:00">March 04, 2015</time></p>
+        
+      </footer>
+
+      
+
+      
+
+
+  <nav class="pagination">
+    
+      <a href="http://tianshan.github.io/ceph-deploy/" class="pagination--pager" title="Ceph 源码部署
+">Previous</a>
+    
+    
+      <a href="http://tianshan.github.io/blog-highlight/" class="pagination--pager" title="jekyll 语法高亮
+">Next</a>
+    
+  </nav>
+
+    </div>
+
+    
+      
+
+<div class="page__comments">
+  <h4 class="page__comments-title">Leave a Comment</h4>
+  
+    <section id="disqus_thread"></section>
+  
+</div>
+    
+  </article>
+
+  
+  
+</div>
+
+    <div class="page__footer">
+      <footer>
+        
+
+<div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>Follow:</strong></li>
+    
+    
+    
+    
+      <li><a href="http://github.com/tianshan"><i class="fa fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+    
+    
+    <li><a href="http://tianshan.github.io/feed.xml"><i class="fa fa-fw fa-rss-square" aria-hidden="true"></i> Feed</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2018 tianshan. Powered by <a href="http://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+      </footer>
+    </div>
+
+    <script src="http://tianshan.github.io/assets/js/main.min.js"></script>
+
+
+
+
+  <script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-60561225-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+  
+  <script type="text/javascript">
+  	/* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+  	var disqus_shortname = 'tianshan';
+
+  	/* * * DON'T EDIT BELOW THIS LINE * * */
+  	(function() {
+  		var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+  		dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+  		(document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+  	})();
+
+  	/* * * DON'T EDIT BELOW THIS LINE * * */
+  	(function () {
+  		var s = document.createElement('script'); s.async = true;
+  		s.type = 'text/javascript';
+  		s.src = '//' + disqus_shortname + '.disqus.com/count.js';
+  		(document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+  	}());
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+
+
+
+
+    <!-- start custom footer snippets -->
+
+<!-- end custom footer snippets -->
+
+  </body>
+</html>
+

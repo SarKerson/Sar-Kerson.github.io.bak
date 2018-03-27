@@ -1,0 +1,417 @@
+
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+
+<meta charset="utf-8">
+
+
+
+<!-- begin SEO -->
+
+
+
+
+
+
+
+
+
+<title>Ceph EC代码分析(二) - tianshan’s blog</title>
+
+
+
+
+
+
+
+<meta property="og:locale" content="en-US">
+<meta property="og:site_name" content="tianshan's blog">
+<meta property="og:title" content="Ceph EC代码分析(二)">
+
+
+  <link rel="canonical" href="http://tianshan.github.io/ceph-ec-remove-object/">
+  <meta property="og:url" content="http://tianshan.github.io/ceph-ec-remove-object/">
+
+
+
+  <meta property="og:description" content="Ceph EC常用的编码RS(k, m)，k块数据块，编码为m块校验块，可以容忍任意m块丢失。所以，为保证数据一致性，EC的写需要至少k块完成，才算写成功。Ceph为保证这样的一致性，引入了rollback机制，任意操作都是可回滚的，保证在出错时，能够恢复成上一个完整的版本。">
+
+
+
+
+
+  
+
+  
+
+
+
+
+
+  <meta property="og:type" content="article">
+  <meta property="article:published_time" content="2016-01-13T00:00:00+08:00">
+  
+    <link rel="next" href="http://tianshan.github.io/ceph-deploy-mon-error/" title="Ceph编译部署启动失败">
+  
+  
+    <link rel="prev" href="http://tianshan.github.io/rados-load-gen/" title="Ceph Rados的测试：load-gen">
+  
+
+
+
+
+
+  <script type="application/ld+json">
+    {
+      "@context" : "http://schema.org",
+      "@type" : "person",
+      "name" : "tianshan",
+      "url" : "http://tianshan.github.io",
+      "sameAs" : null
+    }
+  </script>
+
+
+
+
+
+
+<!-- end SEO -->
+
+<link href="http://tianshan.github.io/feed.xml" type="application/atom+xml" rel="alternate" title="tianshan's blog Feed">
+
+<!-- http://t.co/dKP3o1e -->
+<meta name="HandheldFriendly" content="True">
+<meta name="MobileOptimized" content="320">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="http://tianshan.github.io/assets/css/main.css">
+
+<meta http-equiv="cleartype" content="on">
+    <!-- start custom head snippets -->
+
+<!-- insert favicons. use http://realfavicongenerator.net/ -->
+
+<!-- end custom head snippets -->
+  </head>
+
+  <body>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="http://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        <button><div class="navicon"></div></button>
+        <ul class="visible-links">
+          <li class="masthead__menu-item masthead__menu-item--lg"><a href="http://tianshan.github.io/">tianshan's blog</a></li>
+          
+            
+            <li class="masthead__menu-item"><a href="http://tianshan.github.io/about/">About</a></li>
+          
+        </ul>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+    
+
+
+
+
+
+<div id="main" role="main">
+  
+
+
+  <div class="sidebar sticky">
+  
+
+
+
+<div itemscope itemtype="http://schema.org/Person">
+
+  <div class="author__avatar">
+    
+    	<img src="http://tianshan.github.io/images/ts.jpg" class="author__avatar" alt="tianshan">
+    
+  </div>
+
+  <div class="author__content">
+    <h3 class="author__name">tianshan</h3>
+    <p class="author__bio">笔记</p>
+  </div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">Follow</button>
+    <ul class="author__urls social-icons">
+      
+        <li><i class="fa fa-fw fa-map-marker" aria-hidden="true"></i> Somewhere</li>
+      
+      
+      
+        <li><a href="mailto:qutianshan0214@163.com"><i class="fa fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+        <li><a href="https://github.com/tianshan"><i class="fa fa-fw fa-github" aria-hidden="true"></i> Github</a></li>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="http://schema.org/CreativeWork">
+    <meta itemprop="headline" content="Ceph EC代码分析(二)">
+    <meta itemprop="description" content="Ceph EC常用的编码RS(k, m)，k块数据块，编码为m块校验块，可以容忍任意m块丢失。所以，为保证数据一致性，EC的写需要至少k块完成，才算写成功。Ceph为保证这样的一致性，引入了rollback机制，任意操作都是可回滚的，保证在出错时，能够恢复成上一个完整的版本。">
+    <meta itemprop="datePublished" content="January 13, 2016">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+          <h1 class="page__title" itemprop="headline">Ceph EC代码分析(二)
+</h1>
+          
+        </header>
+      
+
+      <section class="page__content" itemprop="text">
+        <p>Ceph EC常用的编码RS(k, m)，k块数据块，编码为m块校验块，可以容忍任意m块丢失。所以，为保证数据一致性，EC的写需要至少k块完成，才算写成功。
+Ceph为保证这样的一致性，引入了rollback机制，任意操作都是可回滚的，保证在出错时，能够恢复成上一个完整的版本。</p>
+
+<p>本篇就对象删除的流程简单介绍下rollback机制，相对比较好理解。</p>
+
+<!--more-->
+
+<p>rollback常见于数据库中，是对之前操作的撤销。Ceph中同样实现rollback机制，在EC对象的修改出错后，rollback对应的操作。</p>
+
+<p>在PGLog中，每条pg_log_entry_t中有这样一个对象<code class="highlighter-rouge">ObjectModDesc</code>，顾名思义记录了对象修改。
+代码在<code class="highlighter-rouge">src/osd/osd_types.h</code>中，支持append, setattrs, rmobject, create, update_snaps几种操作的回滚。而对于副本对象或者不支持的一些操作，会直接<code class="highlighter-rouge">mark_unrollbackable</code>。</p>
+
+<p>每种操作记录如下</p>
+
+<ul>
+  <li>append：记录old_size，利用truncate回滚</li>
+  <li>setattrs：记录old_attrs，直接覆盖回滚</li>
+  <li>rmobject：记录deletion_version，删除的对象会先重命名为带版本的对象，回滚时再重命名回去，下面会详细讨论。</li>
+  <li>create：直接删除就是回滚了。</li>
+  <li>update_snaps：记录old_snaps，这个暂时不讨论。</li>
+</ul>
+
+<p><code class="highlighter-rouge">ObjectModDesc</code>中还有一个<code class="highlighter-rouge">Visitor</code>类，访问者模式，定义了回滚不同操作执行的接口。回滚类的实现，就定义在<code class="highlighter-rouge">PGBackend::RollbackVisitor</code>，对每种操作，都会调用PGBackend的接口，来生成对应的回滚事务。下面主要讨论删除操作。</p>
+
+<p>首先，删除对应OP类型为CEPH_OSD_OP_DELETE，在<code class="highlighter-rouge">ReplicatedPG::do_osd_ops</code>中，然后调用<code class="highlighter-rouge">ReplicatedPG::_delete_oid</code>，其中通过<code class="highlighter-rouge">pool.info.require_rollback()</code>来判断是否需要回滚，也就是否是EC pool，回滚模式下，会调用stash，把对象重命名为当前版本的对象。</p>
+
+<p>这里要提一下什么是带版本的对象，原本保存对象id的结构是hobject_t(代码在src/common/hojbect.h)，在引入EC后，同一个对象的不同OSD存储的数据是不一样的，但还是PG层复用的ReplicatedPG(这里不得不吐槽下混乱的PG层逻辑)，所以需要一个新的结构shard_id来区分不同的OSD，通过为了支持回滚操作，引入了对象版本的概念，所以增加了一个新的结构ghobject_t，来保存shard_id和version参数，然后还保存了一个hobject_t参数。然后在对象索引时，用的是hobject_t，在每个osd具体存储数据时，用的ghojbect_t。</p>
+
+<p>下面看下被删除对象的两个去处。</p>
+
+<h3 id="section">需要回滚的时候</h3>
+<p>在集群状态发生变化的时候，pg会进入peering状态，然后发现pglog有不同时会merge日志，具体的函数为<code class="highlighter-rouge">PGLog::_merge_object_divergent_entries</code>。其中，在发现自己比权威日志多出一部分时，就会把多出的日志添加到<code class="highlighter-rouge">PG::PGLogEntryHandler</code>对象的<code class="highlighter-rouge">to_rollback</code>列表中。然后在下次记录日志调用<code class="highlighter-rouge">PG::append_log</code>时（比如下一次写操作），在<code class="highlighter-rouge">handler.apply(this, &amp;t)</code>函数中生成回滚事务。</p>
+
+<h3 id="section-1">对象真正的删除</h3>
+
+<p><img src="/images/2015-01-13-ceph-ec-remove-object.png" alt="object-remove" /></p>
+
+<p>上图描述了一个对象执行删除操作之后，真正删除时的流程。
+首先，对象真正的删除，是在删除对象的这条pglog要被剔除的时候。pglog保存的条数有两个参数配置，第一个<code class="highlighter-rouge">osd_min_pg_log_entries</code>，pglog最少保存的条目数，默认3000；第二个<code class="highlighter-rouge">osd_max_pg_log_entries</code>，pglog最多保存的条目数，默认10000。两个的区别是，在pg health情况下，pglog超过min条数，就会判断是否要删除，在pg降级或者处于恢复状态时，会从max开始判断。判断pglog的剔除，是在<code class="highlighter-rouge">ReplicatedPG::calc_trim_to</code>，小于<code class="highlighter-rouge">min_last_complete_ondisk</code>(表示还没有落盘的最小版本)的pglog都是可以trim的。</p>
+
+<p>在每次提交事务前，都会调用calc_trim_to函数，判断是否要剔除，更新pg_trim_to，表示直到该版本的pglog都要执行trim。
+第二步在记录新log时，从上一次trim过的pglog开始往后扫描，直到pg_trim_to对应的版本，添加到<code class="highlighter-rouge">PG::PGLogEntryHandler</code>中的<code class="highlighter-rouge">to_trim</code>列表。
+第三部，调用真正的删除接口，<code class="highlighter-rouge">PGbackend::trim_stashed_object</code>生成remove事务，包括在正常Op事务中，发送给ObjectStore，至此对象才会真正删除。
+以上是主OSD的流程。在主OSD给副OSD发送SubOp时，会把最新的pg_trim_to发送过去，副OSD收到后，会执行以上的2，3步。</p>
+
+<p>EC相关的分析链接：</p>
+
+<ol>
+  <li><a href="/ceph-erasure-code-analysis-1/">EC的读</a></li>
+  <li><a href="/ceph-ec-remove-object/">EC删除对象的流程</a></li>
+</ol>
+
+        
+      </section>
+
+      <footer class="page__meta">
+        
+        
+
+
+  
+
+
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fa fa-fw fa-tags" aria-hidden="true"></i> Tags: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="http://tianshan.github.io/tags/#ceph" class="page__taxonomy-item" rel="tag">ceph</a>
+    
+    </span>
+  </p>
+
+
+
+
+        
+          <p class="page__date"><strong><i class="fa fa-fw fa-calendar" aria-hidden="true"></i> Updated:</strong> <time datetime="2016-01-13T00:00:00+08:00">January 13, 2016</time></p>
+        
+      </footer>
+
+      
+
+      
+
+
+  <nav class="pagination">
+    
+      <a href="http://tianshan.github.io/rados-load-gen/" class="pagination--pager" title="Ceph Rados的测试：load-gen
+">Previous</a>
+    
+    
+      <a href="http://tianshan.github.io/ceph-deploy-mon-error/" class="pagination--pager" title="Ceph编译部署启动失败
+">Next</a>
+    
+  </nav>
+
+    </div>
+
+    
+      
+
+<div class="page__comments">
+  <h4 class="page__comments-title">Leave a Comment</h4>
+  
+    <section id="disqus_thread"></section>
+  
+</div>
+    
+  </article>
+
+  
+  
+</div>
+
+    <div class="page__footer">
+      <footer>
+        
+
+<div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>Follow:</strong></li>
+    
+    
+    
+    
+      <li><a href="http://github.com/tianshan"><i class="fa fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+    
+    
+    <li><a href="http://tianshan.github.io/feed.xml"><i class="fa fa-fw fa-rss-square" aria-hidden="true"></i> Feed</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2018 tianshan. Powered by <a href="http://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+      </footer>
+    </div>
+
+    <script src="http://tianshan.github.io/assets/js/main.min.js"></script>
+
+
+
+
+  <script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-60561225-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+  
+  <script type="text/javascript">
+  	/* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+  	var disqus_shortname = 'tianshan';
+
+  	/* * * DON'T EDIT BELOW THIS LINE * * */
+  	(function() {
+  		var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+  		dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+  		(document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+  	})();
+
+  	/* * * DON'T EDIT BELOW THIS LINE * * */
+  	(function () {
+  		var s = document.createElement('script'); s.async = true;
+  		s.type = 'text/javascript';
+  		s.src = '//' + disqus_shortname + '.disqus.com/count.js';
+  		(document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+  	}());
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+
+
+
+
+    <!-- start custom footer snippets -->
+
+<!-- end custom footer snippets -->
+
+  </body>
+</html>
+

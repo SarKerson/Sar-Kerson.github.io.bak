@@ -1,0 +1,466 @@
+
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+
+<meta charset="utf-8">
+
+
+
+<!-- begin SEO -->
+
+
+
+
+
+
+
+
+
+<title>Ceph中EC的对齐 - tianshan’s blog</title>
+
+
+
+
+
+
+
+<meta property="og:locale" content="en-US">
+<meta property="og:site_name" content="tianshan's blog">
+<meta property="og:title" content="Ceph中EC的对齐">
+
+
+  <link rel="canonical" href="http://tianshan.github.io/ceph-erasure-code-alignment/">
+  <meta property="og:url" content="http://tianshan.github.io/ceph-erasure-code-alignment/">
+
+
+
+  <meta property="og:description" content="ErasureCode应用在存储中的是满足MDS性质的线性分组码，最常用的是Reed Solomon编码。 将一份数据切成K块数据块，然后编码成M块校验块，放到K+M个OSD上，可以容忍任意M块丢失。">
+
+
+
+
+
+  
+
+  
+
+
+
+
+
+  <meta property="og:type" content="article">
+  <meta property="article:published_time" content="2015-11-23T00:00:00+08:00">
+  
+    <link rel="next" href="http://tianshan.github.io/ceph-erasure-code-analysis-1/" title="Ceph EC的代码分析(一)">
+  
+  
+    <link rel="prev" href="http://tianshan.github.io/ceph-read-write-op/" title="Ceph读写流程分析二">
+  
+
+
+
+
+
+  <script type="application/ld+json">
+    {
+      "@context" : "http://schema.org",
+      "@type" : "person",
+      "name" : "tianshan",
+      "url" : "http://tianshan.github.io",
+      "sameAs" : null
+    }
+  </script>
+
+
+
+
+
+
+<!-- end SEO -->
+
+<link href="http://tianshan.github.io/feed.xml" type="application/atom+xml" rel="alternate" title="tianshan's blog Feed">
+
+<!-- http://t.co/dKP3o1e -->
+<meta name="HandheldFriendly" content="True">
+<meta name="MobileOptimized" content="320">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="http://tianshan.github.io/assets/css/main.css">
+
+<meta http-equiv="cleartype" content="on">
+    <!-- start custom head snippets -->
+
+<!-- insert favicons. use http://realfavicongenerator.net/ -->
+
+<!-- end custom head snippets -->
+  </head>
+
+  <body>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="http://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        <button><div class="navicon"></div></button>
+        <ul class="visible-links">
+          <li class="masthead__menu-item masthead__menu-item--lg"><a href="http://tianshan.github.io/">tianshan's blog</a></li>
+          
+            
+            <li class="masthead__menu-item"><a href="http://tianshan.github.io/about/">About</a></li>
+          
+        </ul>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+    
+
+
+
+
+
+<div id="main" role="main">
+  
+
+
+  <div class="sidebar sticky">
+  
+
+
+
+<div itemscope itemtype="http://schema.org/Person">
+
+  <div class="author__avatar">
+    
+    	<img src="http://tianshan.github.io/images/ts.jpg" class="author__avatar" alt="tianshan">
+    
+  </div>
+
+  <div class="author__content">
+    <h3 class="author__name">tianshan</h3>
+    <p class="author__bio">笔记</p>
+  </div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">Follow</button>
+    <ul class="author__urls social-icons">
+      
+        <li><i class="fa fa-fw fa-map-marker" aria-hidden="true"></i> Somewhere</li>
+      
+      
+      
+        <li><a href="mailto:qutianshan0214@163.com"><i class="fa fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+        <li><a href="https://github.com/tianshan"><i class="fa fa-fw fa-github" aria-hidden="true"></i> Github</a></li>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="http://schema.org/CreativeWork">
+    <meta itemprop="headline" content="Ceph中EC的对齐">
+    <meta itemprop="description" content="ErasureCode应用在存储中的是满足MDS性质的线性分组码，最常用的是Reed Solomon编码。 将一份数据切成K块数据块，然后编码成M块校验块，放到K+M个OSD上，可以容忍任意M块丢失。">
+    <meta itemprop="datePublished" content="November 23, 2015">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+          <h1 class="page__title" itemprop="headline">Ceph中EC的对齐
+</h1>
+          
+        </header>
+      
+
+      <section class="page__content" itemprop="text">
+        <p>ErasureCode应用在存储中的是满足MDS性质的线性分组码，最常用的是Reed Solomon编码。 将一份数据切成K块数据块，然后编码成M块校验块，放到K+M个OSD上，可以容忍任意M块丢失。</p>
+
+<p>Ceph的EC支持主要是Loïc Dachary实现的。具体的PG层逻辑，复用了ReplicatedPG，写数据前的准备工作，都是在主OSD完成。
+编码的工作由对应的plugin完成，可以很灵活的实现自己的编码。Plugin的选用是在创建ecpool时的ecprofile中指定的，具体的设置可以参考<a href="http://docs.ceph.com/docs/master/rados/operations/erasure-code/">官网</a>。</p>
+
+<p>已有的Plugin是Jerasure，Intel ISA，LRC，SHEL，前两者是采用硬件加速的编码库，后两者是基于RS改进的编码方案，主要改进了修复的效率和占用的资源。</p>
+
+<!--more-->
+
+<p>目前Ceph不支持EC的偏移写，只能writefull，或者offset要满足是strip_width的倍数，且正好是原始对象的末尾，所以最终都会转换成一个AppendOp。</p>
+
+<p>编码的流程</p>
+
+<pre><code class="language-C++">// ECTransaction::TransGenerator
+void operator()(const ECTransaction::AppendOp &amp;op)
+
+// 每次编码的buf大小是stripe_width=K*chunk_size，循环编码
+ECUtil::encode(sinfo, ecimpl, bl, want, &amp;buffers);
+
+// ECPlugin实现的编码过程
+ecimpl-&gt;encode(want, buf, &amp;encoded);
+</code></pre>
+
+<p>其中，chunk_size也是每个osd上要存的数据量，就是一次要对齐的大小，再来看chunk_size是怎么来的。</p>
+
+<p>ECBackend中有这样一个变量，<code class="highlighter-rouge">ECUtil::stripe_info_t sinfo</code>，sinfo包含变量stripe_width。
+sinfo是在ECBackend构造的时候实例化的。</p>
+
+<p>实例化过程</p>
+
+<p>OSDMonitor::prepare_new_pool -&gt; prepare_pool_stripe_width</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="n">ErasureCodeInterfaceRef</span> <span class="n">erasure_code</span><span class="p">;</span>
+<span class="c1">// 实例化ecprofile定义的ECPlugin
+</span><span class="n">get_erasure_code</span><span class="p">(</span><span class="n">erasure_code_profile</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">erasure_code</span><span class="p">,</span> <span class="n">ss</span><span class="p">);</span>
+<span class="c1">// 用户期望的条带大小，读取配置文件的选项 osd_pool_erasure_code_stripe_width
+</span><span class="kt">uint32_t</span> <span class="n">desired_stripe_width</span> <span class="o">=</span> <span class="n">g_conf</span><span class="o">-&gt;</span><span class="n">osd_pool_erasure_code_stripe_width</span><span class="p">;</span>
+<span class="c1">// 调用ECPlugin的函数来获取条带大小
+</span><span class="n">stripe_width</span> <span class="o">=</span> <span class="n">erasure_code</span><span class="o">-&gt;</span><span class="n">get_data_chunk_count</span><span class="p">()</span> <span class="o">*</span>
+      <span class="n">erasure_code</span><span class="o">-&gt;</span><span class="n">get_chunk_size</span><span class="p">(</span><span class="n">desired_stripe_width</span><span class="p">);</span>
+</code></pre>
+</div>
+
+<p>不同的ECPlugin会有不同的条带大小，下面主要分析下Jerasure为例。get_chunk_size的对齐过程</p>
+
+<ul>
+  <li>
+    <p>调用<code class="highlighter-rouge">alignment = get_alignment()</code>返回ECPlugin实现的编码本身需要的对齐长度，就是一次矩阵运算需要的byte数</p>
+  </li>
+  <li>
+    <p>然后根据对齐长度，使object_size满足为alignment的整数倍</p>
+  </li>
+  <li>
+    <p>如果per_chunk_alignment为true，会使每个chunk大小都是alignment的整数倍。默认false</p>
+  </li>
+</ul>
+
+<p>详细代码</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="n">ErasureCodeJerasure</span><span class="o">::</span><span class="n">get_chunk_size</span><span class="p">(</span><span class="kt">int</span> <span class="n">object_size</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="kt">unsigned</span> <span class="n">alignment</span> <span class="o">=</span> <span class="n">get_alignment</span><span class="p">();</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">per_chunk_alignment</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="n">chunk_size</span> <span class="o">=</span> <span class="n">object_size</span> <span class="o">/</span> <span class="n">k</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">object_size</span> <span class="o">%</span> <span class="n">k</span><span class="p">)</span>
+      <span class="n">chunk_size</span><span class="o">++</span><span class="p">;</span>
+    <span class="kt">unsigned</span> <span class="n">modulo</span> <span class="o">=</span> <span class="n">chunk_size</span> <span class="o">%</span> <span class="n">alignment</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">modulo</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">chunk_size</span> <span class="o">+=</span> <span class="n">alignment</span> <span class="o">-</span> <span class="n">modulo</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">chunk_size</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="n">tail</span> <span class="o">=</span> <span class="n">object_size</span> <span class="o">%</span> <span class="n">alignment</span><span class="p">;</span>
+    <span class="kt">unsigned</span> <span class="n">padded_length</span> <span class="o">=</span> <span class="n">object_size</span> <span class="o">+</span> <span class="p">(</span> <span class="n">tail</span> <span class="o">?</span>  <span class="p">(</span> <span class="n">alignment</span> <span class="o">-</span> <span class="n">tail</span> <span class="p">)</span> <span class="o">:</span> <span class="mi">0</span> <span class="p">);</span>
+    <span class="k">return</span> <span class="n">padded_length</span> <span class="o">/</span> <span class="n">k</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="c1">// Jerasure支持不同的编码方案，会有部分差别，这只是一个例子
+</span><span class="kt">unsigned</span> <span class="n">ErasureCodeJerasureLiberation</span><span class="o">::</span><span class="n">get_alignment</span><span class="p">()</span> <span class="k">const</span>
+<span class="p">{</span>
+  <span class="c1">// k: data chunk数
+</span>  <span class="c1">// w: 一次编码的字长，也是有限域运算的位长，默认为8。GF(2^8)上的运算可以查表
+</span>  <span class="c1">// packetsize: 一次编码组的个数
+</span>  <span class="c1">// sizeof(int): jerasure是把数据存在int中的，所以要对齐int
+</span>  <span class="kt">unsigned</span> <span class="n">alignment</span> <span class="o">=</span> <span class="n">k</span> <span class="o">*</span> <span class="n">w</span> <span class="o">*</span> <span class="n">packetsize</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">);</span>
+  <span class="c1">// LARGEST_VECTOR_WORDSIZE 的作用未知
+</span>  <span class="k">if</span> <span class="p">(</span> <span class="p">((</span><span class="n">w</span><span class="o">*</span><span class="n">packetsize</span><span class="o">*</span><span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">))</span><span class="o">%</span><span class="n">LARGEST_VECTOR_WORDSIZE</span><span class="p">)</span> <span class="p">)</span>
+    <span class="n">alignment</span> <span class="o">=</span> <span class="n">k</span><span class="o">*</span><span class="n">w</span><span class="o">*</span><span class="n">packetsize</span><span class="o">*</span><span class="n">LARGEST_VECTOR_WORDSIZE</span><span class="p">;</span>
+  <span class="k">return</span> <span class="n">alignment</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre>
+</div>
+
+<p>总结，不同的编码本身会有不同的编码要求，跟踪get_chunk_size和get_alignment函数可以得到，了解对齐原理后合理设置参数，才能使编码性能提高。
+每次编码都会prepare逻辑，object_size过小，会频繁prepare，导致性能下降。</p>
+
+
+        
+      </section>
+
+      <footer class="page__meta">
+        
+        
+
+
+  
+
+
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fa fa-fw fa-tags" aria-hidden="true"></i> Tags: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="http://tianshan.github.io/tags/#ceph" class="page__taxonomy-item" rel="tag">ceph</a><span class="sep">, </span>
+    
+      
+      
+      <a href="http://tianshan.github.io/tags/#erasurecode" class="page__taxonomy-item" rel="tag">ErasureCode</a>
+    
+    </span>
+  </p>
+
+
+
+
+        
+          <p class="page__date"><strong><i class="fa fa-fw fa-calendar" aria-hidden="true"></i> Updated:</strong> <time datetime="2015-11-23T00:00:00+08:00">November 23, 2015</time></p>
+        
+      </footer>
+
+      
+
+      
+
+
+  <nav class="pagination">
+    
+      <a href="http://tianshan.github.io/ceph-read-write-op/" class="pagination--pager" title="Ceph读写流程分析二
+">Previous</a>
+    
+    
+      <a href="http://tianshan.github.io/ceph-erasure-code-analysis-1/" class="pagination--pager" title="Ceph EC的代码分析(一)
+">Next</a>
+    
+  </nav>
+
+    </div>
+
+    
+      
+
+<div class="page__comments">
+  <h4 class="page__comments-title">Leave a Comment</h4>
+  
+    <section id="disqus_thread"></section>
+  
+</div>
+    
+  </article>
+
+  
+  
+</div>
+
+    <div class="page__footer">
+      <footer>
+        
+
+<div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>Follow:</strong></li>
+    
+    
+    
+    
+      <li><a href="http://github.com/tianshan"><i class="fa fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+    
+    
+    <li><a href="http://tianshan.github.io/feed.xml"><i class="fa fa-fw fa-rss-square" aria-hidden="true"></i> Feed</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2018 tianshan. Powered by <a href="http://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+      </footer>
+    </div>
+
+    <script src="http://tianshan.github.io/assets/js/main.min.js"></script>
+
+
+
+
+  <script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-60561225-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+  
+  <script type="text/javascript">
+  	/* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+  	var disqus_shortname = 'tianshan';
+
+  	/* * * DON'T EDIT BELOW THIS LINE * * */
+  	(function() {
+  		var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+  		dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+  		(document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+  	})();
+
+  	/* * * DON'T EDIT BELOW THIS LINE * * */
+  	(function () {
+  		var s = document.createElement('script'); s.async = true;
+  		s.type = 'text/javascript';
+  		s.src = '//' + disqus_shortname + '.disqus.com/count.js';
+  		(document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+  	}());
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+
+
+
+
+    <!-- start custom footer snippets -->
+
+<!-- end custom footer snippets -->
+
+  </body>
+</html>
+

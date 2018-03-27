@@ -1,0 +1,423 @@
+
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+
+<meta charset="utf-8">
+
+
+
+<!-- begin SEO -->
+
+
+
+
+
+
+
+
+
+<title>Calamari部署 - tianshan’s blog</title>
+
+
+
+
+
+
+
+<meta property="og:locale" content="en-US">
+<meta property="og:site_name" content="tianshan's blog">
+<meta property="og:title" content="Calamari部署">
+
+
+  <link rel="canonical" href="http://tianshan.github.io/calamari-deploy/">
+  <meta property="og:url" content="http://tianshan.github.io/calamari-deploy/">
+
+
+
+  <meta property="og:description" content="Calamari是Ceph官方出品的监控平台，监控内容很丰富，可以做一些基本的运维操作，但是还不能做Ceph部署，需要结和ceph-deploy。Calamari比较复杂，文档也比较少，记录下部署中遇到的坑。。。">
+
+
+
+
+
+  
+
+  
+
+
+
+
+
+  <meta property="og:type" content="article">
+  <meta property="article:published_time" content="2015-07-25T00:00:00+08:00">
+  
+    <link rel="next" href="http://tianshan.github.io/python-pdb/" title="python pdb调试">
+  
+  
+    <link rel="prev" href="http://tianshan.github.io/ceph-rpm/" title="Ceph源码构建并安装">
+  
+
+
+
+
+
+  <script type="application/ld+json">
+    {
+      "@context" : "http://schema.org",
+      "@type" : "person",
+      "name" : "tianshan",
+      "url" : "http://tianshan.github.io",
+      "sameAs" : null
+    }
+  </script>
+
+
+
+
+
+
+<!-- end SEO -->
+
+<link href="http://tianshan.github.io/feed.xml" type="application/atom+xml" rel="alternate" title="tianshan's blog Feed">
+
+<!-- http://t.co/dKP3o1e -->
+<meta name="HandheldFriendly" content="True">
+<meta name="MobileOptimized" content="320">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="http://tianshan.github.io/assets/css/main.css">
+
+<meta http-equiv="cleartype" content="on">
+    <!-- start custom head snippets -->
+
+<!-- insert favicons. use http://realfavicongenerator.net/ -->
+
+<!-- end custom head snippets -->
+  </head>
+
+  <body>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="http://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        <button><div class="navicon"></div></button>
+        <ul class="visible-links">
+          <li class="masthead__menu-item masthead__menu-item--lg"><a href="http://tianshan.github.io/">tianshan's blog</a></li>
+          
+            
+            <li class="masthead__menu-item"><a href="http://tianshan.github.io/about/">About</a></li>
+          
+        </ul>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+    
+
+
+
+
+
+<div id="main" role="main">
+  
+
+
+  <div class="sidebar sticky">
+  
+
+
+
+<div itemscope itemtype="http://schema.org/Person">
+
+  <div class="author__avatar">
+    
+    	<img src="http://tianshan.github.io/images/ts.jpg" class="author__avatar" alt="tianshan">
+    
+  </div>
+
+  <div class="author__content">
+    <h3 class="author__name">tianshan</h3>
+    <p class="author__bio">笔记</p>
+  </div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">Follow</button>
+    <ul class="author__urls social-icons">
+      
+        <li><i class="fa fa-fw fa-map-marker" aria-hidden="true"></i> Somewhere</li>
+      
+      
+      
+        <li><a href="mailto:qutianshan0214@163.com"><i class="fa fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+        <li><a href="https://github.com/tianshan"><i class="fa fa-fw fa-github" aria-hidden="true"></i> Github</a></li>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="http://schema.org/CreativeWork">
+    <meta itemprop="headline" content="Calamari部署">
+    <meta itemprop="description" content="Calamari是Ceph官方出品的监控平台，监控内容很丰富，可以做一些基本的运维操作，但是还不能做Ceph部署，需要结和ceph-deploy。Calamari比较复杂，文档也比较少，记录下部署中遇到的坑。。。">
+    <meta itemprop="datePublished" content="July 25, 2015">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+          <h1 class="page__title" itemprop="headline">Calamari部署
+</h1>
+          
+        </header>
+      
+
+      <section class="page__content" itemprop="text">
+        <p>Calamari是Ceph官方出品的监控平台，监控内容很丰富，可以做一些基本的运维操作，但是还不能做Ceph部署，需要结和ceph-deploy。
+Calamari比较复杂，文档也比较少，记录下部署中遇到的坑。。。</p>
+
+<!--more-->
+
+<h2 id="calamri">简单介绍下Calamri架构</h2>
+
+<ul>
+  <li>Calamari 监控平台，使用Apache做服务器
+    <ul>
+      <li>Calamari-server： 服务端</li>
+      <li>Calamari-client： 客户端，包括了web端的UI，可以自己定制</li>
+      <li>graphite: 收集数据的存储与展现，提供了接口，可以获取指定间隔的统计量。可以通过服务器地址单独访问 {calamari}/graphite/dashboard。包含在Calamari中</li>
+    </ul>
+  </li>
+  <li>Salt 服务器基础架构管理平台，具备配置管理、远程执行、监控等功能。
+    <ul>
+      <li>Salt-master Salt的服务端</li>
+      <li>Salt-minion Salt的节点端</li>
+    </ul>
+  </li>
+  <li>diamond 各个节点的数据收集器，收集节点信息发送到服务端。Calamari定制了一个版本。</li>
+</ul>
+
+<h2 id="section">部署</h2>
+
+<h3 id="ubuntucalamari">Ubuntu下的Calamari部署</h3>
+
+<p>可以<a href="http://calamari.readthedocs.org/en/latest/operations/server_install.html">参考官方</a>的介绍。没有尝试过。。</p>
+
+<h3 id="centos">主要是Centos的部署</h3>
+
+<ul>
+  <li>
+    <p>从安装包部署 <a href="https://bbs.ceph.org.cn/topic/135">https://bbs.ceph.org.cn/topic/135</a></p>
+  </li>
+  <li>
+    <p>从源码部署 <a href="http://ovirt-china.org/mediawiki/index.php/%E5%AE%89%E8%A3%85%E9%83%A8%E7%BD%B2Ceph_Calamari">http://ovirt-china.org/mediawiki/index.php/%E5%AE%89%E8%A3%85%E9%83%A8%E7%BD%B2Ceph_Calamari</a></p>
+  </li>
+</ul>
+
+<p>刚部署完，diamond老是起不来，看log，有个包load不到，<code class="highlighter-rouge">PySNMP</code>，需要pip装下。</p>
+
+<blockquote>
+  <p>特别注意，在下面版本下，需要<code class="highlighter-rouge">Salt-2014.1</code>版本，出现的症状就是，ceph-server能连上，但是Calamari识别不了ceph集群。</p>
+
+  <div class="highlighter-rouge"><pre class="highlight"><code>ceph 0.94.2
+calamari-1.3
+diamond-3.4.67
+</code></pre>
+  </div>
+  <p>被这个问题坑了2天，后来发现社区前几天刚报了个bug <a href="http://tracker.ceph.com/issues/12264">http://tracker.ceph.com/issues/12264</a></p>
+</blockquote>
+
+        
+      </section>
+
+      <footer class="page__meta">
+        
+        
+
+
+  
+
+
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fa fa-fw fa-tags" aria-hidden="true"></i> Tags: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="http://tianshan.github.io/tags/#calamari" class="page__taxonomy-item" rel="tag">calamari</a><span class="sep">, </span>
+    
+      
+      
+      <a href="http://tianshan.github.io/tags/#ceph" class="page__taxonomy-item" rel="tag">ceph</a>
+    
+    </span>
+  </p>
+
+
+
+
+        
+          <p class="page__date"><strong><i class="fa fa-fw fa-calendar" aria-hidden="true"></i> Updated:</strong> <time datetime="2015-07-25T00:00:00+08:00">July 25, 2015</time></p>
+        
+      </footer>
+
+      
+
+      
+
+
+  <nav class="pagination">
+    
+      <a href="http://tianshan.github.io/ceph-rpm/" class="pagination--pager" title="Ceph源码构建并安装
+">Previous</a>
+    
+    
+      <a href="http://tianshan.github.io/python-pdb/" class="pagination--pager" title="python pdb调试
+">Next</a>
+    
+  </nav>
+
+    </div>
+
+    
+      
+
+<div class="page__comments">
+  <h4 class="page__comments-title">Leave a Comment</h4>
+  
+    <section id="disqus_thread"></section>
+  
+</div>
+    
+  </article>
+
+  
+  
+</div>
+
+    <div class="page__footer">
+      <footer>
+        
+
+<div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>Follow:</strong></li>
+    
+    
+    
+    
+      <li><a href="http://github.com/tianshan"><i class="fa fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+    
+    
+    <li><a href="http://tianshan.github.io/feed.xml"><i class="fa fa-fw fa-rss-square" aria-hidden="true"></i> Feed</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2018 tianshan. Powered by <a href="http://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+      </footer>
+    </div>
+
+    <script src="http://tianshan.github.io/assets/js/main.min.js"></script>
+
+
+
+
+  <script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-60561225-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+  
+  <script type="text/javascript">
+  	/* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+  	var disqus_shortname = 'tianshan';
+
+  	/* * * DON'T EDIT BELOW THIS LINE * * */
+  	(function() {
+  		var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+  		dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+  		(document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+  	})();
+
+  	/* * * DON'T EDIT BELOW THIS LINE * * */
+  	(function () {
+  		var s = document.createElement('script'); s.async = true;
+  		s.type = 'text/javascript';
+  		s.src = '//' + disqus_shortname + '.disqus.com/count.js';
+  		(document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+  	}());
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+
+
+
+
+    <!-- start custom footer snippets -->
+
+<!-- end custom footer snippets -->
+
+  </body>
+</html>
+

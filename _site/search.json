@@ -1,0 +1,520 @@
+
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+
+<meta charset="utf-8">
+
+
+
+<!-- begin SEO -->
+
+
+
+
+
+
+
+
+
+<title>tianshan's blog</title>
+
+
+
+
+
+
+
+<meta property="og:locale" content="en-US">
+<meta property="og:site_name" content="tianshan's blog">
+<meta property="og:title" content="tianshan’s blog">
+
+
+  <link rel="canonical" href="http://tianshan.github.io/search.json">
+  <meta property="og:url" content="http://tianshan.github.io/search.json">
+
+
+
+
+
+
+
+  
+
+  
+
+
+
+
+
+
+
+
+
+  <script type="application/ld+json">
+    {
+      "@context" : "http://schema.org",
+      "@type" : "person",
+      "name" : "tianshan",
+      "url" : "http://tianshan.github.io",
+      "sameAs" : null
+    }
+  </script>
+
+
+
+
+
+
+<!-- end SEO -->
+
+<link href="http://tianshan.github.io/feed.xml" type="application/atom+xml" rel="alternate" title="tianshan's blog Feed">
+
+<!-- http://t.co/dKP3o1e -->
+<meta name="HandheldFriendly" content="True">
+<meta name="MobileOptimized" content="320">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="http://tianshan.github.io/assets/css/main.css">
+
+<meta http-equiv="cleartype" content="on">
+    <!-- start custom head snippets -->
+
+<!-- insert favicons. use http://realfavicongenerator.net/ -->
+
+<!-- end custom head snippets -->
+  </head>
+
+  <body>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="http://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        <button><div class="navicon"></div></button>
+        <ul class="visible-links">
+          <li class="masthead__menu-item masthead__menu-item--lg"><a href="http://tianshan.github.io/">tianshan's blog</a></li>
+          
+            
+            <li class="masthead__menu-item"><a href="http://tianshan.github.io/about/">About</a></li>
+          
+        </ul>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+    
+
+
+
+<div id="main" role="main">
+  
+
+
+
+  <div class="archive">
+    
+      <h1 class="page__title"></h1>
+    
+    [
+
+{
+"id": "-ceph-rgw-multipart",
+"title": "Ceph RGW multipart 上传简析",
+"author": null,
+"tags": ["ceph"],
+"url": "/ceph-rgw-multipart/",
+"date": "2016-07-11",
+"content": "最近研究了跟了Ceph的RGW S3协议的multipart的一个bug15886，顺着bug分析了下多块上传的流程。问题主要是多块上传中，如果有相同upload id的重传，就有可能丢数据，目前H版和J版都已修复，并在s3-tests的master分支添加了对应的测试用例test_multipart_resend_first_finishes_last。Multipart是客户端发起的一个分块上传的协议。首先是一个POST消息，请求upload id，然后就是每一块的PUT上传，PUT过程类似普通块的上传。如下图，是multipart的put流程图。出错逻辑主要是函数add_written_obj，他的作用是，记录正在写的对象，如果出错，那么会在销毁processor时清除该对象。问题在于原来函数调用位置在handle_obj_data，也就是写对象之前，导致对象重复时，实际没有写入，但把原来正确的对象清除了。修正后在throttle_data中调用，改在对象写成功后，就不会有问题了。测试的用例是，先写A，然后以重传形式写B，然后complet B，再完成A。这时实际对象内容应该是A。在B写入时，发现upload id相同的分片存在，就会重新生成临时upload id，保证不重复，所以B也就是一个临时对象，最后complete的A为实际对象内容。"
+}, 
+
+{
+"id": "-fast-16",
+"title": "Fast 16年部分论文",
+"author": null,
+"tags": ["论文"],
+"url": "/fast-16/",
+"date": "2016-03-13",
+"content": "Fast 16年的论文全集前段时间出来了，先读了EC相关的，其他的后面找时间读。全集地址：https://www.usenix.org/conference/fast16/technical-sessionsEfficient and Available In-memory KV-Store with Hybrid Erasure Coding and Replication内存KV系统，贡献一：元数据使用副本，保持高效访问，在数据部分失效时，还能提供访问。数据部分使用ec，节省空间。贡献二：online recovery，没看出来有啥特别的。。。可能是因为memcached没有提供复杂的恢复机制？贡献三：在Memcached中实现了上述他有个假设是后端还有持久化系统，所以我的理解，内存掉电时，如果不够恢复，那只能依靠其他了，这部分论文没有涉及。Opening the Chrysalis: On the Real Repair Performance of MSR Codes主要网络编码在工业系统中的应用，实现在了HDFS（批量编码，类似HDFS-Raid）Ceph（在线编码），并比较了多项参数。网络编码相比普通EC能节省传输带宽。主要思想，一个节点会存储不止一个编码块（例如r个），修复时，会将本节点的多个编码块编码成一个，所以只要传输1/r存储大小。缺点，编码更复杂，计算开销也会上升。本片论文采用蝴蝶码，基于GF(2)，所以计算开销不高，只能容忍2块丢失（m固定为2，k任意），感觉有点类似Raid6。暂时还未找到公开代码。"
+}, 
+
+{
+"id": "-inside-the-c++-object-model",
+"title": "读书笔记：深度探索C++对象模型",
+"author": null,
+"tags": ["book"],
+"url": "/inside-the-c++-object-model/",
+"date": "2016-02-21",
+"content": "该书是C++作者之一Lippman的心得之作，可以了解C++很多背后的故事，也可以更好的理解面向对象。Lippman同时也是C++ Primer的作者。第一章：关于对象，印象比较深的是C++类的内存布局介绍，以及从继承，多态等角度比较了不同的内存布局。第二章：构造函数语义学  第一部分，有4种情况，编译器会构造出有用的默认构造函数。          带有默认构造函数的类成员      带有默认构造函数的基类      带有虚函数的类，会初始化额外的指针（vptr）指向virtual function table（vtbl）      带有虚基类的类，会初始化额外的指针（__vbcX）指向虚基类        第二部分，类似，分4种情况，编译器会构造默认的copy constructor  第三部分，介绍了初始化时编译器可能会做的优化  第四部分，介绍了构造函数的成员初始化列表"
+}, 
+
+{
+"id": "-to-myself",
+"title": "致2016",
+"author": null,
+"tags": [],
+"url": "/to-myself/",
+"date": "2016-02-08",
+"content": "又是除夕夜，从去年这时候开了博客，那时的新年愿望是坚持写博客，零零散散写了30篇，还挖了好多坑，算是完成了一半吧。今年愿望就是能坚持写些有质量的文章哈:)简单回顾下2015。去年有缘加入了一家创业公司，也算正式进入存储行业，进入了ceph圈，认识了很多大牛。学了很多，做了很多，还有很多要去弥补，要更多的深入原理，多看基本经典书。今年主要方向还在存储，主要是Ceph，有兴趣的可以一起讨论哈。最近贡献了Ceph的EC Overwrite模块，一些性能优化还没做好，本来要在Ceph Develop Mouthly要讨论下，然后很悲剧的话筒没调好，没能说上话。。。争取今年能够贡献更多核心模块，还得练好听力，不然赶不上老外的语速了。"
+}, 
+
+{
+"id": "-ceph-deploy-mon-error",
+"title": "Ceph编译部署启动失败",
+"author": null,
+"tags": [],
+"url": "/ceph-deploy-mon-error/",
+"date": "2016-01-27",
+"content": "Ceph编译安装经常会出现各种问题，这里记录下。1.权限问题默认ceph是以ceph用户启动的，可以查看src/init-ceph，导致在root用户下用ceph-deploy部署时，mon不能起来。  还没部署前，可以直接修改ceph为root就可以了。已经部署失败后，因为service文件已经写好了，还要改一个地方。ls /etc/systemd/system/ceph-mon.target.wants/ 可以看到对应的文件为/usr/lib/systemd/system/ceph-mon@.service，所以修改该文件中setuser和setgroup后的用户即可。2.selinux需要关闭，否则可能会遇到filestore(/var/lib/ceph/tmp/mnt.icGL7K) mkjournal error creating journal on /var/lib/ceph/tmp/mnt.icGL7K/journal: (13) Permission denied 类似的错误getenfoce       #查看当前设置setenforce 0    #临时设置永久设置，修改文件，然后重启/etc/selinux/configSELINUX=disabled3.动态链接库找不到默认是安装在/usr/local/bin，对应的库在/usr/local/lib。 这种情况需要修改 /etc/ld.so.conf，添加 include /usr/local/lib，然后执行ldconfig 重新加载库。  如果要临时设置，也可以export LD_LIBRARY_PATH=/usr/local/lib4.python文件找不到问题同上，默认安装在/usr/local/。在.bashrc中添加python搜索路径，export PYTHONPATH=$PYTHONPATH:/usr/local/lib/python2.7/site-packages/"
+}, 
+
+{
+"id": "-ceph-ec-remove-object",
+"title": "Ceph EC代码分析(二)",
+"author": null,
+"tags": ["ceph"],
+"url": "/ceph-ec-remove-object/",
+"date": "2016-01-13",
+"content": "Ceph EC常用的编码RS(k, m)，k块数据块，编码为m块校验块，可以容忍任意m块丢失。所以，为保证数据一致性，EC的写需要至少k块完成，才算写成功。Ceph为保证这样的一致性，引入了rollback机制，任意操作都是可回滚的，保证在出错时，能够恢复成上一个完整的版本。本篇就对象删除的流程简单介绍下rollback机制，相对比较好理解。rollback常见于数据库中，是对之前操作的撤销。Ceph中同样实现rollback机制，在EC对象的修改出错后，rollback对应的操作。在PGLog中，每条pg_log_entry_t中有这样一个对象ObjectModDesc，顾名思义记录了对象修改。代码在src/osd/osd_types.h中，支持append, setattrs, rmobject, create, update_snaps几种操作的回滚。而对于副本对象或者不支持的一些操作，会直接mark_unrollbackable。每种操作记录如下  append：记录old_size，利用truncate回滚  setattrs：记录old_attrs，直接覆盖回滚  rmobject：记录deletion_version，删除的对象会先重命名为带版本的对象，回滚时再重命名回去，下面会详细讨论。  create：直接删除就是回滚了。  update_snaps：记录old_snaps，这个暂时不讨论。ObjectModDesc中还有一个Visitor类，访问者模式，定义了回滚不同操作执行的接口。回滚类的实现，就定义在PGBackend::RollbackVisitor，对每种操作，都会调用PGBackend的接口，来生成对应的回滚事务。下面主要讨论删除操作。首先，删除对应OP类型为CEPH_OSD_OP_DELETE，在ReplicatedPG::do_osd_ops中，然后调用ReplicatedPG::_delete_oid，其中通过pool.info.require_rollback()来判断是否需要回滚，也就是否是EC pool，回滚模式下，会调用stash，把对象重命名为当前版本的对象。这里要提一下什么是带版本的对象，原本保存对象id的结构是hobject_t(代码在src/common/hojbect.h)，在引入EC后，同一个对象的不同OSD存储的数据是不一样的，但还是PG层复用的ReplicatedPG(这里不得不吐槽下混乱的PG层逻辑)，所以需要一个新的结构shard_id来区分不同的OSD，通过为了支持回滚操作，引入了对象版本的概念，所以增加了一个新的结构ghobject_t，来保存shard_id和version参数，然后还保存了一个hobject_t参数。然后在对象索引时，用的是hobject_t，在每个osd具体存储数据时，用的ghojbect_t。下面看下被删除对象的两个去处。需要回滚的时候在集群状态发生变化的时候，pg会进入peering状态，然后发现pglog有不同时会merge日志，具体的函数为PGLog::_merge_object_divergent_entries。其中，在发现自己比权威日志多出一部分时，就会把多出的日志添加到PG::PGLogEntryHandler对象的to_rollback列表中。然后在下次记录日志调用PG::append_log时（比如下一次写操作），在handler.apply(this, &amp;t)函数中生成回滚事务。对象真正的删除上图描述了一个对象执行删除操作之后，真正删除时的流程。首先，对象真正的删除，是在删除对象的这条pglog要被剔除的时候。pglog保存的条数有两个参数配置，第一个osd_min_pg_log_entries，pglog最少保存的条目数，默认3000；第二个osd_max_pg_log_entries，pglog最多保存的条目数，默认10000。两个的区别是，在pg health情况下，pglog超过min条数，就会判断是否要删除，在pg降级或者处于恢复状态时，会从max开始判断。判断pglog的剔除，是在ReplicatedPG::calc_trim_to，小于min_last_complete_ondisk(表示还没有落盘的最小版本)的pglog都是可以trim的。在每次提交事务前，都会调用calc_trim_to函数，判断是否要剔除，更新pg_trim_to，表示直到该版本的pglog都要执行trim。第二步在记录新log时，从上一次trim过的pglog开始往后扫描，直到pg_trim_to对应的版本，添加到PG::PGLogEntryHandler中的to_trim列表。第三部，调用真正的删除接口，PGbackend::trim_stashed_object生成remove事务，包括在正常Op事务中，发送给ObjectStore，至此对象才会真正删除。以上是主OSD的流程。在主OSD给副OSD发送SubOp时，会把最新的pg_trim_to发送过去，副OSD收到后，会执行以上的2，3步。EC相关的分析链接：  EC的读  EC删除对象的流程"
+}, 
+
+{
+"id": "-rados-load-gen",
+"title": "Ceph Rados的测试：load-gen",
+"author": null,
+"tags": ["ceph"],
+"url": "/rados-load-gen/",
+"date": "2016-01-07",
+"content": "对Ceph的性能测试，常见的有fio测试rbd，而对rados的直接测试，可以通过rados bench命令，本篇介绍另外一个命令rados load-gen相关代码在src/tools/rados/rados.cc，整体流程是这样的1. LoadGen lg(&amp;rados);      // 实例化测试类2. lg.bootstrap(pool_name); // 生成初始的测试对象    生成指定个数和随机大小的测试对象，然后写入pool，实际只会在len位置写入1B（例如：需要生成1024B的对象，实际会在off=1024的位置写1B，相当于占了1024的空间），应该是为了快速生成，但这样的话就不能测试EC pool，可以通过修改源码来支持。3. lg.run();                // 测试过程    循环生成op提交4. lg.cleanup();            // 清理生成的对象#生成next op的主要代码void LoadGen::gen_op(LoadGenOp *op){  // 随机选取生成好的对象  int i = get_random(0, objs.size() - 1);  obj_info&amp; info = objs[i];  op-&gt;oid = info.name;  // 随机生成长度  size_t len = get_random(min_op_len, max_op_len);  if (len &gt; info.len)    len = info.len;  // 随机生成偏移  size_t off = get_random(0, info.len);  if (off + len &gt; info.len)    off = info.len - len;  op-&gt;off = off;  op-&gt;len = len;  // 随机生成读或写  i = get_random(1, 100);  if (i &gt; read_percent)    op-&gt;type = OP_WRITE;  else    op-&gt;type = OP_READ;}再来看参数设置--num-objects           初始生成测试用的对象数，默认 200--min-object-size       测试对象的最小大小，默认 1KB，单位byte --max-object-size       测试对象的最大大小，默认 5GB，单位byte--min-op-len            压测IO的最小大小，默认 1KB，单位byte--max-op-len            压测IO的最大大小，默认 2MB，单位byte--max-ops               一次提交的最大IO数，相当于iodepth--target-throughput     一次提交IO的历史累计吞吐量上限，默认 5MB/s，单位B/s--max-backlog           一次提交IO的吞吐量上限，默认10MB/s，单位B/s--read-percent          读写混合中读的比例，默认80，范围[0, 100]--run-length            运行的时间，默认60s，单位秒一个典型的用例# 测试4KB写，iodepth=64，速度不限rados -p rbd load-gen --num-objects 128 --min-object-size 8192 --max-object-size 8192 --run-length 20 --read-percent 0 --min-op-len 4096 --max-op-len 4096 --target-throughput 104857600 --max_backlog 104857600 --max-ops 64整体的流程和rados bench差不多，但是支持跟丰富的测试语义。"
+}, 
+
+{
+"id": "-ceph-erasure-code-analysis-1",
+"title": "Ceph EC的代码分析(一)",
+"author": null,
+"tags": ["ceph", "ErasureCode"],
+"url": "/ceph-erasure-code-analysis-1/",
+"date": "2015-12-03",
+"content": "传统的存储可靠性都是用多副本实现，但是很多大容量备份场景、多媒体内容存储等，多副本的存储成本已经不能忍受，ErasureCode是通用的解决方案，而且这些场景往往是一次写多次读，很适合EC的特点。ErasureCode可以用1.5副本就实现丢失任意两块都可以恢复出原始数据，但EC也有很明显的缺点，修复数据代价太大，这个以后再讨论。Ceph的EC目前支持append写，为丰富接口，对接nfs等，最近就在实现EC的overwrite，所以就从EC的角度，分析一下Ceph的PG层逻辑。Placemeng GroupPG全称Placement Group， 用于对象的第一层逻辑聚合，对象到PG的映射就是oid的一次取模，这层映射是不变的，所以当OSD变动时，不会导致大量元数据的变动。PG层代码，主要有  osd/PG 定义了PG层的接口  osd/ReplicatedPG 副本模式的接口实现在引入EC后，复用了ReplicagePG部分逻辑，所以引入了PGBackend的新接口，用于实现Replicated和EC不同的逻辑。这样的设计，导致现在的PG层逻辑相当混乱，有些会调用PG接口，有写会调用Replicated接口，阅读代码会很困惑。从Loïc Dachary的博客可以看到Loïc在设计EC时和Sam对PG的讨论。目前Sam在对PG那块的代码进行重构，未来逻辑应该会清晰。下面就EC的几个典型操作，分析下这层的逻辑。Ceph的EC逻辑EC写，是client发送数据到主OSD，然后编码数据生成ObjectStore的Transaction，然后发送SubOp到对应的副OSD，都reply后，会回调完成。EC读，逻辑简单一点，因为读数据需要读取多个副OSD的数据，所以EC只支持异步读。同样，client发送Op到主OSD，主OSD在生成SubReadOp，所有SubReadReply后，回调complete函数，解码并返回给client。yahoo在前几个提了一个patch，实现了fast_read，其实就是避免了OSD短板，每次发送读请求给所有OSD，然后取先返回的k个OSD数据解码。读需要等所有数据返回后再解码，在长时间使用过程中，HDD会有性能下降，所以读Op速度取决于k个osd中最慢的那个。从CDS_Jewel可以看到，初步实验结果，fast read可以提升30%性能，但集群负载也会提高。EC read的流程如下，相对比较简单  因为ec read需要多个osd的数据，所以只支持异步读。  EC是条带写的，所以读之前，会把读的范围，通过ECUtil::stripe_info_t.offset_len_to_stripe_bounds转换成对应每个osd需要读的范围。EC相关的分析链接：  EC的读  EC删除对象的流程"
+}, 
+
+{
+"id": "-ceph-erasure-code-alignment",
+"title": "Ceph中EC的对齐",
+"author": null,
+"tags": ["ceph", "ErasureCode"],
+"url": "/ceph-erasure-code-alignment/",
+"date": "2015-11-23",
+"content": "ErasureCode应用在存储中的是满足MDS性质的线性分组码，最常用的是Reed Solomon编码。 将一份数据切成K块数据块，然后编码成M块校验块，放到K+M个OSD上，可以容忍任意M块丢失。Ceph的EC支持主要是Loïc Dachary实现的。具体的PG层逻辑，复用了ReplicatedPG，写数据前的准备工作，都是在主OSD完成。编码的工作由对应的plugin完成，可以很灵活的实现自己的编码。Plugin的选用是在创建ecpool时的ecprofile中指定的，具体的设置可以参考官网。已有的Plugin是Jerasure，Intel ISA，LRC，SHEL，前两者是采用硬件加速的编码库，后两者是基于RS改进的编码方案，主要改进了修复的效率和占用的资源。目前Ceph不支持EC的偏移写，只能writefull，或者offset要满足是strip_width的倍数，且正好是原始对象的末尾，所以最终都会转换成一个AppendOp。编码的流程// ECTransaction::TransGeneratorvoid operator()(const ECTransaction::AppendOp &amp;op)// 每次编码的buf大小是stripe_width=K*chunk_size，循环编码ECUtil::encode(sinfo, ecimpl, bl, want, &amp;buffers);// ECPlugin实现的编码过程ecimpl-&gt;encode(want, buf, &amp;encoded);其中，chunk_size也是每个osd上要存的数据量，就是一次要对齐的大小，再来看chunk_size是怎么来的。ECBackend中有这样一个变量，ECUtil::stripe_info_t sinfo，sinfo包含变量stripe_width。sinfo是在ECBackend构造的时候实例化的。实例化过程OSDMonitor::prepare_new_pool -&gt; prepare_pool_stripe_widthErasureCodeInterfaceRef erasure_code;// 实例化ecprofile定义的ECPluginget_erasure_code(erasure_code_profile, &amp;erasure_code, ss);// 用户期望的条带大小，读取配置文件的选项 osd_pool_erasure_code_stripe_widthuint32_t desired_stripe_width = g_conf-&gt;osd_pool_erasure_code_stripe_width;// 调用ECPlugin的函数来获取条带大小stripe_width = erasure_code-&gt;get_data_chunk_count() *      erasure_code-&gt;get_chunk_size(desired_stripe_width);不同的ECPlugin会有不同的条带大小，下面主要分析下Jerasure为例。get_chunk_size的对齐过程      调用alignment = get_alignment()返回ECPlugin实现的编码本身需要的对齐长度，就是一次矩阵运算需要的byte数        然后根据对齐长度，使object_size满足为alignment的整数倍        如果per_chunk_alignment为true，会使每个chunk大小都是alignment的整数倍。默认false  详细代码ErasureCodeJerasure::get_chunk_size(int object_size){  unsigned alignment = get_alignment();  if (per_chunk_alignment) {    unsigned chunk_size = object_size / k;    if (object_size % k)      chunk_size++;    unsigned modulo = chunk_size % alignment;    if (modulo) {      chunk_size += alignment - modulo;    }    return chunk_size;  } else {    unsigned tail = object_size % alignment;    unsigned padded_length = object_size + ( tail ?  ( alignment - tail ) : 0 );    return padded_length / k;  }}// Jerasure支持不同的编码方案，会有部分差别，这只是一个例子unsigned ErasureCodeJerasureLiberation::get_alignment() const{  // k: data chunk数  // w: 一次编码的字长，也是有限域运算的位长，默认为8。GF(2^8)上的运算可以查表  // packetsize: 一次编码组的个数  // sizeof(int): jerasure是把数据存在int中的，所以要对齐int  unsigned alignment = k * w * packetsize * sizeof(int);  // LARGEST_VECTOR_WORDSIZE 的作用未知  if ( ((w*packetsize*sizeof(int))%LARGEST_VECTOR_WORDSIZE) )    alignment = k*w*packetsize*LARGEST_VECTOR_WORDSIZE;  return alignment;}总结，不同的编码本身会有不同的编码要求，跟踪get_chunk_size和get_alignment函数可以得到，了解对齐原理后合理设置参数，才能使编码性能提高。每次编码都会prepare逻辑，object_size过小，会频繁prepare，导致性能下降。"
+}, 
+
+{
+"id": "-ceph-read-write-op",
+"title": "Ceph读写流程分析二",
+"author": null,
+"tags": ["ceph"],
+"url": "/ceph-read-write-op/",
+"date": "2015-11-09",
+"content": "上一节分析了整体的读写流程，这节主要理一下OP出队过程中，主OSD上ReplicatePG-&gt;do_osd_op的过程。读OP：OSD_OP_READ写OP：OSD_OP_WRITE"
+}, 
+
+{
+"id": "-upload-server",
+"title": "搭建简易的文件服务器",
+"author": null,
+"tags": ["nginx"],
+"url": "/upload-server/",
+"date": "2015-10-11",
+"content": "需求很简单，就是一个能够存取文件的服务器，其他的事情都由客户端自己完成。选定nginx服务器后，折腾怎么上传，最多的选择是编译添加nginx-upload-module。不过看了下，官方版本v2.2很久没更新了，和最新的nginx编译会出现编译出错，使用了一些不再支持的函数。然后发现了国外13年的一片博文，Nginx direct file upload without passing them through backend, 尝试了 clientbodyinfileonly 感觉不太好使又去搜寻。最后发现nginx-upload-module的github仓库的2.2分支最后14年有更新，而且解决了编译问题，所以还是回归这个，网上的教程也比较多。可以通过 git clone -b 2.2 https://github.com/vkholodkov/nginx-upload-module 直接clone相应代码。编译过程就不列出来了，demo里都有。nginx搞定后加个后端稍微处理下文件。默认的nginx接收文件后，会以hash文件名保存到upload_store定义的文件夹。 用django移动到指定目录下，并重命名。（django有点大了，后面学习下flask重搞下）。#搭建djangodjango-admin.py startproject uploadmodule#启动工程python manager.py runserver 0.0.0.0:9999然后修改下uploadmodule/urls.py, 改成urlpatterns = [    url(r'^upload/', 'uploadmodule.view.upload'),    #第二个参数指定到view中的处理函数]在uploadmodule/中添加view.py，相比原来的文章，加了LOG和一点小处理，还有把文件的移动改调用 os.rename，这样在同一个块设备上不会涉及数据复制。# -*- coding: utf-8 -*-import osimport jsonimport timeimport logging from django.http import HttpResponsefrom django.views.decorators.csrf import csrf_exempt # init loggerUPLOAD_FILE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'files')os.environ[\"TZ\"] = \"Asia/Shanghai\"log_path = 'log/upload.log'if not os.path.exists(os.path.dirname(log_path)):    os.makedirs(os.path.dirname(log_path))LOG = logging.getLogger('view')LOG.setLevel(logging.DEBUG)filehandler = logging.handlers.TimedRotatingFileHandler(    log_path, 'midnight')formatter = logging.Formatter(    '%(asctime)s %(name)-8s %(levelname)-5s: %(message)s')filehandler.setFormatter(formatter)filehandler.suffix = \"%Y%m%d\"LOG.addHandler(filehandler)@csrf_exemptdef upload(request):    request_params = request.POST    file_name = request_params['file_name']    file_content_type = request_params['file_content_type']    file_md5 = request_params['file_md5']    file_path = request_params['file_path']    file_size = request_params['file_size']    file_user = request_params.get('user', None)    ip_address = request.META.get('HTTP_X_REAL_IP') or request.META.get('HTTP_REMOTE_ADD')    content = {        'name': file_name,        'content_type': file_content_type,        'path': file_path,        'size': file_size,        'ip': ip_address,        'state': 0,        'error': ''    }    if not file_user:        content['state'] = -1        content['error'] = 'user field not set'        LOG.error('no user request: %s %s' % (file_name, ip_address) )        return http_response(content)     # move to new name 'date+some_tag+name'    now = time.strftime(\"%Y%m%d_%H%M\", time.localtime())    new_file_name = '%s_%s' % (now, file_name)    new_file_dir = os.path.join(UPLOAD_FILE_PATH, file_user)    new_file_path = os.path.join(new_file_dir, new_file_name)    LOG.info('result: %s %s %s' % (file_user, file_name, ip_address))    if not os.path.exists(new_file_dir):        os.makedirs(new_file_dir)    # 使用重命名修改文件属性，相比shutil.move是复制数据    os.rename(file_path, new_file_path)     response = http_response(content)    return responsedef http_response(content):    content = json.dumps(content)    response = HttpResponse(content, content_type='application/json; charset=utf-8')    return response最后，使用uwsgi来启动服务，添加配置文件uwsgi.ini[uwsgi]socket = 127.0.0.1:9999master = truepidfile = /tmp/uwsgi-upload-server.piddaemonize = /tmp/uwsgi-upload-server.logprocess = 1 module = uploadmodule.wsgi:applicationmax-requests = 100vacuum = truelimit-as = 1024logdate = trueenv = DJANGO_SETTINGS_MODULE=uploadmodule.settingsenable-threads = true完整的demo放在github上了。参考:使用Nginx Upload Module实现上传文件功能"
+}, 
+
+{
+"id": "-pytest-mock",
+"title": "pytest的mocking模块",
+"author": null,
+"tags": ["pytest"],
+"url": "/pytest-mock/",
+"date": "2015-09-14",
+"content": "在用tox集成py.test时遇到个问题，一个测试脚本需要测试运行流程的正确性，但某个测试函数会调用外部的ceph的命令，又会产生一些其他的依赖，而这些函数不是测试重点，就可以使用mock模块，用一个其他函数来替换有依赖的函数，两个函数输入一致，但是这个函数可以不做任何处理，所以就跳过了依赖调用。具体场景是这样的，有个函数需要调用ceph命令获取磁盘，ceph命令又会依赖python-rados，而这个函数这一步并不需要去做检测。所以可以用另一个函数替换，如下：mock有很多实现，有python的独立安装包mock等，pytest通过monkeypatch参数实现了这一功能，不用额外依赖。# 因为是替换的class中的函数，所以会有self参数def mock_get_blocks(self):    return '/dev/sda'# 注意，这里需要参数monkeypatch，pytest会自动处理def test_run(monkeypatch):    # 这里会替换 MyClass.get_blocks()函数    monkeypatch.setattr(MyClass, 'get_blocks', mock_get_blocks)    # 如果不想import MyClass类，可以通过传入raising来跳过检测    monkeypatch.setattr(MyClass, 'get_blocks', mock_get_blocks, raising=False)接下来就可以愉快的使用 tox -e py27 来做集成测试了。# tox集成pytest的简单示例[testenv:py27]deps =    pytestcommands =    py.test tests/ {posargs}目前应该用场景比较简单，后面有更复杂的话再记录。参考  pytest文档对monkeypatch的简单介绍：https://pytest.org/latest/monkeypatch.html  tox集成pytest的样例：http://tox.readthedocs.org/en/latest/example/pytest.html"
+}, 
+
+{
+"id": "-python-pdb",
+"title": "python pdb调试",
+"author": null,
+"tags": ["python", "pdb"],
+"url": "/python-pdb/",
+"date": "2015-08-26",
+"content": "简单记录pdb的使用# 通过再代码中设置import pdbpdb.set_trace() # 代码会停留再改语句，然后进入调试模式# 或者python -m pdb *.py基本命令            命令      用途      说明                  break 或 b      设置断点      b *.py:line or b *.function()              continue 或 c      继续执行程序                     list 或 l      查看当前行的代码段                     step 或 s      进入函数                     return 或 r      执行代码直到从当前函数返回                     exit 或 q      中止并退出                     next 或 n      执行下一行                     p      打印变量的值                     help      帮助             第一条命令后继续按enter，会重复上一条命令。在运行中可以动态改变变量的值。"
+}, 
+
+{
+"id": "-calamari-deploy",
+"title": "Calamari部署",
+"author": null,
+"tags": ["ceph", "calamari"],
+"url": "/calamari-deploy/",
+"date": "2015-07-25",
+"content": "Calamari是Ceph官方出品的监控平台，监控内容很丰富，可以做一些基本的运维操作，但是还不能做Ceph部署，需要结和ceph-deploy。Calamari比较复杂，文档也比较少，记录下部署中遇到的坑。。。简单介绍下Calamri架构  Calamari 监控平台，使用Apache做服务器          Calamari-server： 服务端      Calamari-client： 客户端，包括了web端的UI，可以自己定制      graphite: 收集数据的存储与展现，提供了接口，可以获取指定间隔的统计量。可以通过服务器地址单独访问 {calamari}/graphite/dashboard。包含在Calamari中        Salt 服务器基础架构管理平台，具备配置管理、远程执行、监控等功能。          Salt-master Salt的服务端      Salt-minion Salt的节点端        diamond 各个节点的数据收集器，收集节点信息发送到服务端。Calamari定制了一个版本。部署Ubuntu下的Calamari部署可以参考官方的介绍。没有尝试过。。主要是Centos的部署      从安装包部署 https://bbs.ceph.org.cn/topic/135        从源码部署 http://ovirt-china.org/mediawiki/index.php/%E5%AE%89%E8%A3%85%E9%83%A8%E7%BD%B2Ceph_Calamari  刚部署完，diamond老是起不来，看log，有个包load不到，PySNMP，需要pip装下。  特别注意，在下面版本下，需要Salt-2014.1版本，出现的症状就是，ceph-server能连上，但是Calamari识别不了ceph集群。  ceph 0.94.2calamari-1.3diamond-3.4.67    被这个问题坑了2天，后来发现社区前几天刚报了个bug http://tracker.ceph.com/issues/12264"
+}, 
+
+{
+"id": "-ceph-rpm",
+"title": "Ceph源码构建并安装",
+"author": null,
+"tags": ["ceph"],
+"url": "/ceph-rpm/",
+"date": "2015-07-21",
+"content": "如果需要要修改Ceph源码，就要自己构建安装包，然后指定ceph-deploy的安装源。本文主要介绍从git上clone源码，然后用rpmbuild打包，最后用ceph-deploy安装。环境为Centos，ceph版本0.94.2(hammer)，不同版本的文件稍微有点不一样。RPM打包官方的RPM打包教程http://ceph.com/docs/master/install/build-ceph/。如果只是尝试打包的话，这个教程基本够了，下面主要讲从git源码开始。1.git(recursive会把子模块一起克隆)git clone --recursive https://github.com/ceph/ceph.git2.切换到目前最新的Hammer版（0.94.2），切换前先复制下两个用来打包的文件cd ceph#复制打包命令cp make_dist.sh ../ cp -r bin ../#切换release分之git checkout v0.94.23.把源码压缩为bz2文件，要用到之前复制的打包命令。结束后会在目录下出现ceph-0.94.2.tar.bz2文件#复制文件cp ../make_dist.sh ./cp -r ../bin ./#执行压缩打包./make_dist 0.94.24.准备rpmbuild目录5.准备构建文件#复制源码cp ceph/ceph-0.94.2.tar.bz2 rpmbuild/SOURCES/#复制补丁文件cp ceph/rpm/init-ceph.in-fedora.patch rpmbuild/SOURCES/#复制spec文件cp ceph/ceph.spec.in rpmbuild/SPECS/ceph.spec6.开始build，编译完成会在rpmbuild/RPMS/x86_64目录下生成打包文件rpmbuild -ba rpmbuild/SPECS/ceph.spec  注意，编译大概需要近20G存储空间ceph-deploy源指定待续"
+}, 
+
+{
+"id": "-ceph-memstore",
+"title": "MemStore源码分析",
+"author": null,
+"tags": ["ceph"],
+"url": "/ceph-memstore/",
+"date": "2015-07-02",
+"content": "MemStore总体的结构比较简单，Object通过Collection的概念来组织Object，每个Collection有两个结构存储Object映射。下图的MemStore的关键内容，左侧是事务处理函数，右图是主要的类图关键变量  object_hash  object的hash结构，使用了STL的unordered_map，类似于Java的HashMap。 object可以快速定位  object_map  object的map结构，使用了STL的map，类似于Java的TreeMap，内部是红黑树实现。object可以快速遍历访问  lock  涉及到object_hash/map 的写修改，都会上锁还没看的点1.分多个Collection的作用(对应不同pool？)2.omap的映射还没整理关键函数      read(cid,oid,offset,len,bl,op_flags,allow_eio)读的情况比较简单，有读的请求会直接调用本函数。主要流程c=get_collection(cid) -&gt; RLocker (c-&gt;lock) -&gt; ObjectRef o=c-&gt;get_object(oid)-&gt; offset检查 –&gt; len检查 –&gt; bl.substr_of(o-&gt;data, offset, l)        _load()通过文件加载collections和object信息到内存首先读取 ObjectStore path/collections 文件，包含了以path/cid为名字的各个collection文件，再从文件中依次decode出object。        _write(cid, oid, offset, len, bl, fadviseflags)从写事务中decode出各项参数，然后就调用了本函数。主要流程c=get_collection(cid)-&gt; WLock (c-&gt;lock) -&gt; ObjectRef o=c-&gt;get_object(oid) (if not exists, then create and add to c ) -&gt; _write_into_bl(bl, offset, &amp;o-&gt;data) write bufferlist data into object        _write_into_bl(src, offset, dst)将src数据写到dst的offset位置后面。实现步骤，新建bufferlist newdata，先拷贝dst到newdata，如果长度小于offset，则补0，然后将src数据append在newdata后面，最后dst的数据重新映射到newdata        _truncate(cid, oid, size)调整object大小如果size&lt;o.len，复制o的前面size大小数据到新的bl，然后o重新映射到新的bl；如果size&gt;o.len，新建size-o.len长度的bl，补0后append在o后面        _remove(cid, oid)从cid的collection的object_map和object_hash中删除oid        _clone(cid, oldoid, newoid)找到newoid对应对象，如果没有则新建。然后将newoid的data，omap_header, omap, xattr映射到oldoid的对应数据。        _clone_range(cid, oldoid, newoid, srcoff, len, dstoff) 从oldoid的scroff开始，克隆len长的数据到newoid的dstoff后面。        _create_collection(cid)和_destory_collection(cid)collection的创建和销毁  "
+}, 
+
+{
+"id": "-ceph-readwrite",
+"title": "Ceph读写流程分析",
+"author": null,
+"tags": ["ceph"],
+"url": "/ceph-readwrite/",
+"date": "2015-06-08",
+"content": "初步的Ceph读写流程分析。更详细的IO路径整理好了放上来。Ceph OSD层的数据层级1.OSD主要实现 OSD,OSDService ，每个数据节点的守护进程2.PG主要实现 PG,ReplicatedPG,ReplicatedBackend，Object的逻辑组织3.ObjectStore主要实现 FileStore,KeyValueStore,MemStore，直接操作数据OSD层和PG层的读写OSD和ObjectStore层，都有一个线程池（tp）和消息队列（wq），每个线程会从不同消息队列中取出消息然后执行。  下图是OSD的消息入队路径，红色为主要路径  消息入队后，线程池OSDService-&gt;op_tp（osd-&gt;osd_op_tp）从队列中拿出消息开始工作。详细流程见下图图中，红色方框都是主OSD的操作，蓝色方框是从OSD的操作。首先会有主OSD消息，经过一定检查后，执行到右半部分，提交事务前，先将从OSD的op添加到Apply和Commit的等待队列，然后发消息给从PG的OSD，最后提交自己的操作到ObjectStore。从OSD收到消息后，会注册Apply和Commit事件（在完成事务后执行），然后提交事务到ObjectStore。"
+}, 
+
+{
+"id": "-ceph-journal",
+"title": "Ceph的Journal机制",
+"author": null,
+"tags": ["ceph"],
+"url": "/ceph-journal/",
+"date": "2015-05-29",
+"content": "Ceph底层FileStore模式下，采用了写日志，就是Journal。实现机制类似数据库的写日志。写数据时，会在journal上写日志，保证出现故障时可以从日志恢复。Journal源代码中主要涉及两个文件，os目录下的FileJournal和FileStore。FileStore中会有FileJournal的一个实例，调用都在这里发生。写Journal有两种模式，parallel和writeahead。顾名思义，parallel就是日志和磁盘数据同时写，writeahead是先写日志，只要日志写成功了，就回返回。后台每隔一段时间后，会同步日志中的写操作，实现落盘。这种方法带来的好处就是，可以把很多小IO合并，形成顺序写盘，提高IOPS。第二种方法中，官方文档提到，  在速度上，通过预写日志方式，后端文件系统合并小IO，可以提升速度。但实际中，会造成性能有明显抖动，一段较高速率后会有一段低速率，如下图  一致性：OSD的守护进程需要文件系统接口来保证原子复合操作。OSD守护进程会把操作的描述写到日志，然后应用到文件系统。这样保证了对象的原子操作。每隔几秒（filestore max sync interval和filestore min sync interval)，OSD守护进程会 停止写操作 然后同步日志到文件系统，使得守护进程能够删除日志重新利用空间。当失败时，OSD守护进程会从日志上一次同步点开始回滚操作。注意：这里面提到会停止写操作，从日志队列的表现来看，就是filestore写队列比较满时，日志队列会为空，一般这时候，就是在同步操作。默认的最大同步间隔filestore max sync interval为5s。同步的流程图如下"
+}, 
+
+{
+"id": "-ceph-setup",
+"title": "Ceph测试集群搭建",
+"author": null,
+"tags": ["ceph"],
+"url": "/ceph-setup/",
+"date": "2015-05-19",
+"content": "这里整理一篇从源码编译的测试集群搭建方法。ceph-deploy的部署方式，可以参考官网。1.编译Ceph-compile2.部署  monitorceph-deploy其中，主要步骤* 配置文件相关：2，3，4，9* 集群准备：6，7，8* 启动：11测试集群的可以省略密钥的配置。  osdceph-deploy  先把monitor的配置文件同步过来后，OSD可以按简单模式配置，启动参照复杂里的[11]可能遇到的问题1.无法访问monitor关闭防火墙，centos 6 是iptable，centos 7是firewall systemctl stop firewalld.service注意，这只是临时关闭，重启后会重新启动。2.sudo找不到命令是因为sudo的path被重置了，如下方法修改sudo visudoDefaults env_reset 改成 Defaults !env_reset在~/.bashrc 添加alias sudo=’sudo env PATH=$PATH’3.sudo ceph -s找不到python依赖也是因为路径重置了，一劳永逸的方法，把ceph/src/pybind的内容复制到Python系统路径中。sudo cp ~/ceph/src/pybind/* /usr/lib/python2.7/site-packages最后，good luck！ceph-deploy快速部署主要参考官网这里记录出现的问题  RuntimeError: NoSectionError: No section: ‘ceph’执行yum remove ceph-release，据说是版本不兼容  RuntimeError: remote connection got closed, ensure requiretty is disabled for进入要部署的机器，执行如下命令sudo visudo把Defaults requiretty 修改为 Defaults:ceph !requiretty如果改完还么起作用，说明免密码的没有配，执行如下echo \"ceph  ALL = (root) NOPASSWD:ALL\" | sudo tee /etc/sudoers.d/ceph  sudo chmod 0440 /etc/sudoers.d/ceph linux相关命令  磁盘调度策略echo deadline &gt; /sys/block/sda/queue/scheduler #调整完会运行cat命令，显示如下，表示选中deadline。cat /sys/block/sda/queue/schedulernoop [deadline] cfq#因为参数是维护在内存中的，所以不能直接用vim修改，否则保存时会提示 E667:同步失败  添加用户sudo useradd ceph   #添加用户sudo passwd ceph    #设置密码#添加sudo权限visudo#在下面仿照root，添加ceph ALL=(ALL) ALL  格式化硬盘"
+}, 
+
+{
+"id": "-ceph-fio-deploy",
+"title": "ceph性能测试",
+"author": null,
+"tags": ["ceph"],
+"url": "/ceph-fio-deploy/",
+"date": "2015-05-10",
+"content": "研究一段时间后，开始测试Ceph性能。ceph与fio的结合见Ceph Performance Analysis: fio and RBD，官方给出了一个样例。fio的安装centos下，从源码编译安装wget http://brick.kernel.dk/snaps/fio-2.2.8.tar.gztar -zxvf fio-2.2.8.tar.gz#安装依赖包,librbd用于连接ceph测试sudo yum install -y libaio-devel zlib-devel librbd1-devel#其中，librbd1-devel提供fio rbd测试接口，安装需要配置ceph的源sudo vim /etc/yum.repos.d/ceph.repo#粘贴如下内容，其中hammer是当前release版本，el7表示centos7，下载源用的欧洲的，注意把gpgcheck置0，因为经常连不上[ceph-noarch]name=Ceph noarch packagesbaseurl=http://eu.ceph.com/rpm-hammer/el7/noarchenabled=1gpgcheck=0type=rpm-mdgpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc#添加完后执行，sudo yum updatecd fio-2.2.8#安装librbd后可以看到`Rados Block Device engine`选项为yes./configuremakesudo make install可能用到的一些命令查看挂载df -hT查看io状态,每隔2s查看sda的扩展统计，共6次iostat -x sda 2 6#参数含义avgrq-sz    #发送到设备的请求的平均大小,单位是扇区avgqu-sz    #发送到设备的请求的平均队列长度查看硬盘SATA信息dmesg | grep ata扫描物理卷sudo lvmdiskscan显示所有逻辑卷sudo pvs删除物理卷sudo pvremove /dev/sdb删除逻辑卷分区，先删除逻辑卷，然后删除逻辑卷组，然后删除分区sudo lvremove /dev/centos1/homesudo vgremove centos1sudo pvremove /dev/sdb2#此时，pvs已经看不到分区的逻辑信息了fio使用的参考链接fio单机测试fio参数说明iostat命令详解"
+}, 
+
+{
+"id": "-github-domain",
+"title": "github pages 域名配置",
+"author": null,
+"tags": ["blog"],
+"url": "/github-domain/",
+"date": "2015-04-28",
+"content": "为github pags配置域名，主要步骤参考https://help.github.com/articles/setting-up-a-custom-domain-with-github-pages/  域名配置官方建议用CNAME。添加一条记录，例如www指向tianshan.github.io，生效后，github会自动做解析跳转，例如tianshan.github.io会跳转到www.quts.me，其他非User pages库也会对应的连接，比如tianshan.github.io/blog/跳转到www.quts.me/blog 。  repository的CNAME配置在库中根目录添加CNAME文件，其中添加域名记录。注意：这个地方好像只有User Pages需要添加，内容就是域名地址，例如www.quts.me。而其他的库，并不需要，github会自动跳转到域名+库名的链接。如果其他库(例如:blog)，想映射到不带后缀的域名（例如:blog.quts.me），这样就需要CNAME文件了，而且_config.yml中的baseurl也需要对应修改。这样会导致原来的tianshan.github.io/blog出问题，不过问题也不大。"
+}, 
+
+{
+"id": "-understand-lbfgs",
+"title": "理解LBFGS",
+"author": null,
+"tags": [],
+"url": "/understand-lbfgs/",
+"date": "2015-04-27",
+"content": "学习LR时翻译”understanding lbfgs”，没做过校正，就算0.1版吧。原文: http://aria42.com/blog/2014/12/understanding-lbfgs/翻译的word版有时间再整理成网页版。"
+}, 
+
+{
+"id": "-ceph-documentation",
+"title": "Ceph文档编译",
+"author": null,
+"tags": ["ceph"],
+"url": "/ceph-documentation/",
+"date": "2015-03-18",
+"content": "Ceph的文档可以从代码中直接编译，主要使用了两个工具doxygen和``sphinx`。doxygen会生成xml和一些图表，sphinx会在这些基础上再生成完整的网页。文档的编译过程如下：1.克隆代码git clone https://github.com/ceph/ceph.git2.安装工具编译所需的以来可以在文件`doc_deps.deb.txt`中找到。3.利用doxygen生成xml，执行命令doxygen DoxyfileDoxyfile为根目录配置文件名，可以通过doxygen -g来生成一个新的文件，查看每个选项的含义。注意，需要在根目录预先新建build-doc目录。执行完后，build-doc中就会多了doxygen目录，里面有xml文件。4.利用sphinx生成文档。进入build-doc目录（因为sphinx会依赖doxygen的生成，不进目录会提示找不到xml文件）cd build-docsphinx-build -b html ../doc htmldoc为sphinx配置文件目录。详细说明见sphinx命令目前有个问题，生成的html有些链接不带后缀.html，阅览不太方便，还没解决。"
+}, 
+
+{
+"id": "-introduction-to-librados",
+"title": "Ceph的Librados介绍",
+"author": null,
+"tags": ["ceph"],
+"url": "/introduction-to-librados/",
+"date": "2015-03-17",
+"content": "Librados是Ceph提供访问存储集群中RADOS（reliable autonomic distributed object store）的接口。本文主要翻译自官方文档，代码部分只保留了C++版本，其余见原文。通过librados可以和存储集群的两类守护进程交互：  Monitor，负责维护了集群映射的主备份  OSD， 负责在存储节点存储对象数据1.安装librados见原文2.配置集群句柄Ceph客户端通过librados和OSD直接交互，存储或者检索数据。要和OSD交互，客户端应用必须调用librados并链接到Monitor。一旦连接后，librados从Monitor中检索集群映射。当客户端应用想要读写数据时，它会创建I/O上下文并绑定到一个pool（存储数据的逻辑分区）。pool有个关联的规则集（应用到特定pool的数据放置策略），定义了在存储集群中如何放置数据。通过I/O上下文，客户端提供对象名给librados，它根据对象名和集群映射（集群的拓扑）计算出数据所在的PG和OSD。然后客户端应用可以读写数据了。客户端应用并不需要直接知道集群的拓扑。Ceph存储集群句柄处理封装的客户端配置，包括：  用户ID用于rados_create()，或者用户名用于rados_create2()  cephx 授权密钥  monitor的ID和IP地址  日志级别  调试级别然后，应用使用集群的首要步骤是1）创建集群句柄；2）使用句柄来连接集群。应用要连接集群，必须提供monitor地址，用户名和授权密钥（cephx默认是打开的）。  要和不同存储集群连接或者同一个集群的不同用户，需要不同的集群句柄。RADOS提供很多方式来设置要求的值。对于monitor和加密钥匙设置，一个很容易处理方式是确保Ceph配置文件中包含keyring路径以及至少一个monitor地址（例如，mon host）。例如：    [global]    mon host = 192.168.1.1    keyring = /etc/ceph/ceph.client.admin.keyring一旦创建了句柄，就可以读取Ceph配置文件来配置句柄。你同样可以传参数到你的应用然后用函数（例如 rados_conf_parse_argv()）来解析命令行参数，或者解析Ceph环境变量（例如，rados_conf_parse_env()）。一些封装可能没有实现方便的方法，所以你可能需要实现这些功能。下图提供了初识化连接的高层流。一旦连接后，你的应用可以通过集群句柄来调用函数影响整个集群。例如，你可以：* 获取集群统计* 使用Pool操作（exists，create，list，delete）* 获取和设置配置Ceph的一个有力的特点是绑定到不同pools的能力。每一个pool会有不同数量的PG，对象副本和副本策略。例如，pool可以设置为”hot”来使用SSDs，用于存储频繁访问的对象，或者设置为”cold”，来用纠删码。大量librados绑定之间的区别在于C和面向对象的C++，Java，Python之间。面向对象的绑定使用对象来代表集群句柄，IO上下文，迭代器，异常等。C++ 示例Ceph工程在ceph/examples/librados中提供C++示例。对于C++，使用用户admin的简单集群句柄需要初始化一个librados::Rados集群句柄对象。12345678910111213141516171819202122232425262728293031323334353637383940414243444546474849505152535455565758596061626364#include &lt;iostream&gt;#include &lt;string&gt;#include &lt;rados/librados.hpp&gt;int main(int argc, const char **argv){    int ret = 0;    /* Declare the cluster handle and required variables. */    librados::Rados cluster;    char cluster_name[] = \"ceph\";    char user_name[] = \"client.admin\";    uint64_t flags;    /* Initialize the cluster handle with the \"ceph\" cluster name and \"client.admin\" user */    {        ret = cluster.init2(user_name, cluster_name, flags);        if (ret &lt; 0) {                std::cerr &lt;&lt; \"Couldn't initialize the cluster handle! error \" &lt;&lt; ret &lt;&lt; std::endl;                ret = EXIT_FAILURE;                return 1;        } else {                std::cout &lt;&lt; \"Created a cluster handle.\" &lt;&lt; std::endl;        }    }    /* Read a Ceph configuration file to configure the cluster handle. */    {        ret = cluster.conf_read_file(\"/etc/ceph/ceph.conf\");        if (ret &lt; 0) {                std::cerr &lt;&lt; \"Couldn't read the Ceph configuration file! error \" &lt;&lt; ret &lt;&lt; std::endl;                ret = EXIT_FAILURE;                return 1;        } else {                std::cout &lt;&lt; \"Read the Ceph configuration file.\" &lt;&lt; std::endl;        }    }    /* Read command line arguments */    {        ret = cluster.conf_parse_argv(argc, argv);        if (ret &lt; 0) {                std::cerr &lt;&lt; \"Couldn't parse command line options! error \" &lt;&lt; ret &lt;&lt; std::endl;                ret = EXIT_FAILURE;                return 1;        } else {                std::cout &lt;&lt; \"Parsed command line options.\" &lt;&lt; std::endl;        }    }    /* Connect to the cluster */    {        ret = cluster.connect();        if (ret &lt; 0) {                std::cerr &lt;&lt; \"Couldn't connect to cluster! error \" &lt;&lt; ret &lt;&lt; std::endl;                ret = EXIT_FAILURE;                return 1;        } else {                std::cout &lt;&lt; \"Connected to the cluster.\" &lt;&lt; std::endl;        }    }    return 0;}编译源代码，并用librados链接。例如：g++ -g -c ceph-client.cc -o ceph-client.og++ -g ceph-client.o -lrados -o ceph-client3.创建I/O上下文一旦应用有了集群句柄并连接到了存储集群，你可以创建I/O上下文并开始读写数据。I/O上下文绑定连接到特定的pool。用户必须有特定的CAPS允许来访问特定的pool。例如，有度权限但是美柚写权限的用户就只能读数据。I/O上下文的功能包括：  读写数据和扩展属性  列出、迭代对象和扩展属性  快照pools，列出快照等等RADOS可以同步或异步的方式交互。一旦你的应用有了I/O上下文，读写操作只需要你知道对象/扩展文件属性的名字。CRUSH算法封装在librados，使用集群映射来确认合适的OSD。OSD守护进程处理副本复制，正如在Smart Daemons Enable Hyperscale。librados库同时负责映射对象到PG，正如在Calculating PG IDs。下面的示例使用默认的datapool。然而，你可以使用API来列出所有的pool，确保是存在的，或者创建、删除pools。对于写操作，是】示例列出了如何使用同步模型。对于读操作，示例列举了如何使用异步模型。  重要：用API删除pool的警告。如果删除一个pool，pool和上面的全部数据都会丢失。C++示例123456789101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899100101102103104105106107108109110111112113114115116117118119120121122123124#include &lt;iostream&gt;#include &lt;string&gt;#include &lt;rados/librados.hpp&gt;int main(int argc, const char **argv){    /* Continued from previous C++ example, where cluster handle and     * connection are established. First declare an I/O Context.     */    librados::IoCtx io_ctx;    const char *pool_name = \"data\";    {        ret = cluster.ioctx_create(pool_name, io_ctx);        if (ret &lt; 0) {                std::cerr &lt;&lt; \"Couldn't set up ioctx! error \" &lt;&lt; ret &lt;&lt; std::endl;                exit(EXIT_FAILURE);        } else {                std::cout &lt;&lt; \"Created an ioctx for the pool.\" &lt;&lt; std::endl;        }    }    /* Write an object synchronously. */    {        librados::bufferlist bl;        bl.append(\"Hello World!\");        ret = io_ctx.write_full(\"hw\", bl);        if (ret &lt; 0) {                std::cerr &lt;&lt; \"Couldn't write object! error \" &lt;&lt; ret &lt;&lt; std::endl;                exit(EXIT_FAILURE);        } else {                std::cout &lt;&lt; \"Wrote new object 'hw' \" &lt;&lt; std::endl;        }    }    /*     * Add an xattr to the object.     */    {        librados::bufferlist lang_bl;        lang_bl.append(\"en_US\");        ret = io_ctx.setxattr(\"hw\", \"lang\", lang_bl);        if (ret &lt; 0) {                std::cerr &lt;&lt; \"failed to set xattr version entry! error \"                &lt;&lt; ret &lt;&lt; std::endl;                exit(EXIT_FAILURE);        } else {                std::cout &lt;&lt; \"Set the xattr 'lang' on our object!\" &lt;&lt; std::endl;        }    }    /*     * Read the object back asynchronously.     */    {        librados::bufferlist read_buf;        int read_len = 4194304;        //Create I/O Completion.        librados::AioCompletion *read_completion = librados::Rados::aio_create_completion();        //Send read request.        ret = io_ctx.aio_read(\"hw\", read_completion, &amp;read_buf, read_len, 0);        if (ret &lt; 0) {                std::cerr &lt;&lt; \"Couldn't start read object! error \" &lt;&lt; ret &lt;&lt; std::endl;                exit(EXIT_FAILURE);        }        // Wait for the request to complete, and check that it succeeded.        read_completion-&gt;wait_for_complete();        ret = read_completion-&gt;get_return_value();        if (ret &lt; 0) {                std::cerr &lt;&lt; \"Couldn't read object! error \" &lt;&lt; ret &lt;&lt; std::endl;                exit(EXIT_FAILURE);        } else {                std::cout &lt;&lt; \"Read object hw asynchronously with contents.\\n\"                &lt;&lt; read_buf.c_str() &lt;&lt; std::endl;        }    }    /*     * Read the xattr.     */    {        librados::bufferlist lang_res;        ret = io_ctx.getxattr(\"hw\", \"lang\", lang_res);        if (ret &lt; 0) {                std::cerr &lt;&lt; \"failed to get xattr version entry! error \"                &lt;&lt; ret &lt;&lt; std::endl;                exit(EXIT_FAILURE);        } else {                std::cout &lt;&lt; \"Got the xattr 'lang' from object hw!\"                &lt;&lt; lang_res.c_str() &lt;&lt; std::endl;        }    }    /*     * Remove the xattr.     */    {        ret = io_ctx.rmxattr(\"hw\", \"lang\");        if (ret &lt; 0) {                std::cerr &lt;&lt; \"Failed to remove xattr! error \"                &lt;&lt; ret &lt;&lt; std::endl;                exit(EXIT_FAILURE);        } else {                std::cout &lt;&lt; \"Removed the xattr 'lang' from our object!\" &lt;&lt; std::endl;        }    }    /*     * Remove the object.     */    {        ret = io_ctx.remove(\"hw\");        if (ret &lt; 0) {                std::cerr &lt;&lt; \"Couldn't remove object! error \" &lt;&lt; ret &lt;&lt; std::endl;                exit(EXIT_FAILURE);        } else {                std::cout &lt;&lt; \"Removed object 'hw'.\" &lt;&lt; std::endl;        }    }}4.关闭会话一旦你的应用使用完了I/O上下文和集群句柄，应用应该关闭连接并关闭句柄。对于异步I/O，应用同样需要等待直到异步操作完成。C++示例12io_ctx.close();cluster.shutdown();"
+}, 
+
+{
+"id": "-ceph-architecture",
+"title": "Ceph架构",
+"author": null,
+"tags": ["ceph"],
+"url": "/ceph-architecture/",
+"date": "2015-03-08",
+"content": "翻译自官网，原文：http://ceph.com/docs/master/architecture/Ceph独特的提供了统一了object， block，和file storage的系统。Ceph高度可靠，容易管理，以及免费。Ceph的优势可以转移公司的IT基础建设和你的能力到管理海量的数据中。Ceph提供额外的扩展性–成千的客户端访问PB和EB大小的数据。一个Ceph节点利用商业硬件和智能守护进程，一个Ceph存储集群可容纳大量的节点，这些节点互相通信来动态复制以及重分配数据。Ceph的存储集群Ceph基于RADOS(Reliable Autonomic Distributed Object Store)提供了无限可扩展的存储集群，详细可以阅读论文一个Ceph存储集群包含两类守护进程  Ceph Monitor  Ceph OSD DaemonCeph monitor维护了集群映射的主拷贝。Ceph的monitors集群通过监控守护进程的失效确保了集群的高可靠性。存储集群客户端通过montior检索集群映射的拷贝。Ceph OSD 守护进程检查自身的状态以及其他OSDs的状态并报告给monitors。存储集群客户端和每一个OSD守护进程使用CRUSH算法来高效的计算数据位置信息，而不是依赖一个中心查询表。Ceph’s的高层特性包括基于 librados 提供给存储集群的一个本地接口，以及构建在 librados 上层的一系列服务接口。存储数据Ceph存储集群从客户端接收数据并存储为对象，不管对方是Ceph Block Device, Ceph Object Storage, Ceph Fileststem 或者是通过 librados 定制的实现。每一个对象对应文件系统中的一个文件存储在对象存储设备中(Object Storage Device)。Ceph OSD守护进程在存储磁盘上处理读写操作。Ceph OSD守护进程在一个扁平的命名空间(没有层级目录)存储所有数据为对象。一个对象包括id，二进制数据，以及包含一组j键值对形式的元数据，元数据的语义完全依赖客户端。例如，CephFS利用元数据存储文件属性，文件所有者，创建时间，最后修改的日期等。Note: 对象的ID在整个集群中都是唯一的，并不只是本地文件系统。扩展性和高可靠性在传统架构中，客户端需要和中心组件交互（例如网关，broker，API，facade等），中心组件往往是进入一个复杂子系统的唯一入口。这样的设定引入了单点故障，就限制了性能和可靠性。Ceph去除了中心网关来使客户端能够和OSD守护进程直接交互。OSD守护进程在其他节点上创建对象副本来确保数据安全和高可靠性。Ceph同时使用了一个monitor集群来确保可靠性。为了实现去中心化，Ceph使用了CRUSH算法。CRUSH介绍Ceph客户端和OSD守护进程都使用CRUSH算法来高效的计算出对象位置信息，而不是依赖于一个中心的查询表。CRUSH使用了智能的数据副本来确保弹性，这点更适合超大规模的存储。接下来的章节提供了CRUSH如何运作的额外细节。CRUSH的详细讨论见论文.集群映射Ceph需要客户端和OSD守护进程知道集群的拓扑，包括了5个映射集合，这就是 “集群映射”。1.The Monitor Map: 包括集群的 fsid ，位置，名字地址，和每一个monitor端口。同时指示了映射的创建时间，和最后的修改时间。查看monitor的映射，通过命令 ceph mon dump 。2.The OSD Map: 包括集群 fdis ，映射创建时间和修改时间，池的列表，副本大小，PG个数，OSDs的列表以及他们的状态（例如 up ， in ）。查看OSD映射，执行 ceph osd dump 。3.The PG Map: 包括PG的版本，它的时间戳，上一个OSD周期，每个pg的full ratios和细节，比如PG ID，Up Set，PG的状态（例如 active+clean），和每个池子的数据使用率。4.The CRUSH Map: 包含一个存储设备的列表，失效域的层级（例如，设备，主机，机架，行，房间等），以及存储数据时遍历层级的规则。查看一个CRUSH的映射，执行 ceph osd getcrushmap -o {filename} ；然后通过执行 crushtool -d {comp-crushmap-filename} -o {decomp-crushmap-filename} 反编译。可以在文本编辑器或者 cat 命令查看反编译映射。5.The MDS Map: 包含当前MDS映射周期，映射的创建时间，最后的修改时间。 同时包含了存储员数据的池子，元数据服务器的列表，以及哪些元数据服务器是 up 和 in 状态的。 查看MDS映射，执行 ceph mds map 。每一个映射包含了一个操作状态修改的迭代历史。Ceph Monitor维护了一个集群映射的主拷贝，包括集群成员，状态，修改，以及整体存储集群的健康状况。高可靠性Monitors在客户端能够读写数据前，需要先联系Monitor来获得集群映射的最近拷贝。Ceph的存储集群在有一个monitor就可以工作；然而，这会带来了单点故障（例如，如果monitor宕机，客户端就不能读写数据了）为了增加可靠性和容错性，Ceph支持monitors集群。在monitors集群中，延迟和其他错误会导致一个或者更多的monitors的状态落后于集群。因此，Ceph必须在大量monitor实例中达成一致，不管集群的状态。Ceph总是使用一个主要的monitor（例如，1,2:3,4:5,4:6，等）和pacos算法就集群当前状态在monitors之间达成一致。monitors配置的详细说明见 Monitor Config Reference高可靠性验证为了区分用户以及抵御中间人攻击，Ceph提供 Cephx 验证系统俩授权用户和守护进程。  注意，Cephx协议并不在传输过程或者其他对数据加密（例如，SSL/TLS）。Ceph使用共享密钥来授权，意味着客户端和monitor集群都会有客户端的密钥。如此的验证协议就是双方都能给对方证明拥有密钥的拷贝而不用真的展示。这创建了共同的授权，集群确定用户拥有密钥，并且用户确定集群拥有密钥的拷贝。Ceph密钥的可伸缩性使得Ceph对象存储不需要一个中心接口，这意味着Ceph客户端需要和OSDs直接交互。为了保护数据，Ceph提供 cephx 验证系统，用来给用户操作客户端授权。 cephx 协议的操作方法类似 Kerberos。用户或者执行者调用Ceph客户端来和monitor通信。不同于Kerberos，每一个monitor都可以授权用户和分发密钥，所以不存在单点故障或者瓶颈。monitor返回一个类似于Kerberos ticket的授权数据结构，包含一个回话钥匙用来获得Ceph服务。这个会话钥匙本身使用用户的永久密钥加密，所以只有对应的用户才能向Ceph monitor(s)请求服务。客户端然后使用会话钥匙来向monitor请求服务，monitor会提供ticket给客户端，授权客户端访问OSDs处理数据的权限。Ceph monitors和OSDs共享一个密钥，所以客户端可以使用monitor提供的ticket访问集群中的任意OSD或者元数据服务器。类似于Kerberos， cephx 的tickets会过期，所以攻击者不能偷偷的使用过期的ticket或者会话钥匙。这种形式的授权可以防止攻击者通过访问通信媒介用其他用户的id伪造假消息或者改变其他用户正常的消息，只要用户的密钥不在过期前泄露。要使用 cephx ，管理员必须先设定用户。在下面的途中， client.admin 从命令行调用 ceph auth get-or-create-key 来生成用户名和密钥。Ceph的 auth 子系统生成用户名和密钥，存储一份到monitor(s)并发回给 client.admin 用户。这意味着客户端和monitor共享一个密钥。  注意， client.admin 必须用安全的方法把用户ID和密钥发送给用户。要获得monitor授权，客户端必须发送用户名给monitor，monitor生成会话钥匙并使用用户名对应的密钥加密。然后，monitor发送加密后的ticket给client。客户端然后用共享密钥解密传输数据来获得会话密钥。会话密钥标识了当前会话的用户。客户端然后请求一个用会话密钥签名代表用户的ticket。monitor生成ticket，用用户的密钥加密然后回传给客户端。客户端解密ticket然后使用它签名访问集群的OSDs和元数据服务器。cephx 协议授权通信在客户端机器和Ceph服务器之间。每一条消息的发送在客户端和服务器之间，然后初始化授权，用ticket签名后，monitors、OSDs和元数据服务器就可以验证共享密钥了。授权提供的Ceph客户端和服务器主机之间的协议。授权不会超出Ceph客户端之外。如果用户从远程主机访问Ceph客户端，Ceph的授权不会应用到用户主机到客户端主机之间。详细的配置，见Ceph Config Guide。用户管理的详细配置，见User Mangement。支撑超大规模的智能守护进程在许多集群架构中，集群成员的主要目的是提供中心化的接口，就是节点可以访问。这类中心化的接口通过双重调度向客户端提供服务–这就会在PB到EB规模时造成了巨大的瓶颈。Ceph去除了这样的瓶颈：Ceph的OSD守护进程和客户端是集群感知的。类似于Ceph客户端，每一个OSD守护进程知道集群中其他ISD守护进程。这使得OSD守护进程可以和其他OSD守护进程和monitors直接交互。除此以外，这使得客户端能够直接和OSD守护进程交互。Ceph客户端，monitor，OSD守护进程能够相互交互，意味着OSD守护进程可以利用Ceph节点的CPU和RAM很容易的执行那些使中心服务器负担的任务。计算能力的利用会带来如下几点益处：1.OSDs直接服务客户端：因为网络设备可支持的连接数是有限的，一个中心化的系统在大规模系统中有较低的物理上限。通过使客户端和OSD守护进程直连，Ceph同时增加了性能和整个系统的容量，并移除了单点故障。当需要时，客户端可以和OSD守护进程保持一个会话，而不是中心服务器。2.OSD成员和状态：OSD守护进程加入一个集群并报告状态。在最底层，OSD守护进程状态为 up 或者 down 反映是否在运行并且能够服务客户端。如果OSD守护进程状态是 down 和 in ，这个状态表示OSD守护进程已经失效。如果OSD守护进程不在运行（例如宕机了），OSD不能通知Monitor它 down 了。monitor可以周期性的ping OSD守护进程来确定他是运行状态。然而，Ceph同样授权OSD守护进程来决定相邻的OSD守护进程是否是 down 来更新集群映射并报告给monitor(s)。这意味着monitors可以保持为轻量级的处理方法。额外的细节见Monitoring OSDs和Heartbeats。3.数据清洗：为了维护数据干净和一致性，OSD守护进程可以在pg内清洗对象。OSD守护进程可以在pg内和其他OSD的对象副本比较元数据。清洗方法（通常一天一次）捕获bugs或者文件系统错误。OSD守护进程同样通过逐位比较对象中数据执行更深层的清洗。深层清洗（通常一周一次）会发现轻清洗不能发现的硬盘坏扇区。清洗的详细配置见Data Scrubbing4.副本：类似于客户端，OSD守护进程使用CRUSH算法，但是OSD用它来计算对象的副本该存在什么地方（重平衡也会用到）。在典型的写场景，客户端使用CRUSH算法来计算存放对象的位置，映射对象到pool和pg，然后查看CRUSH映射来发现pg的主OSD。客户端把对象写到对应pg的主OSD。然后，主OSD在自己的CRUSH映射拷贝中发现第二和第三OSDs来放置副本，然后复制对象到第二第三OSDs（额外副本数）中对应的pg，在确认数据成功存储后（注，这里的存储成功指成功存储到内存缓冲区）回应给客户端。OSD守护进程实现数据复制后，减轻了客户端的职责，同时确保了数据可用性和数据安全。动态集群管理在扩展性和高可用性章节，我们解释了Ceph如何使用CRUSH，集群感知和智能的守护进程保证了扩展性和高可用性。Ceph设计的关键是自治，自恢复，以及智能的OSD守护进程。我们来更深层次的看下CRUSH是如何工作来使现代云存储设施放置数据，重平衡集群以及从失效中动态恢复。关于PoolsCeph的存储系统支持 Pools 的概念，这是存储数据的逻辑分区。Ceph客户端从monitor检索Cluster Map，并写对象到pools。pool的大小或者副本的个数，CRUSH规则集以及pgs的数量会决定Ceph如何放置数据。Pools至少设置需要如下参数：      对象的所有权或者访问权        PG的数量        要使用的CRUSH规则集  详细见Set Pool Values映射PGs到OSDs每个pool有一定数量的pg。CRUSH直接映射PGs到OSDs。当客户端存储数据时，CRUSH映射每一个对象到pg3。映射对象到pg在OSD守护进程和客户端之间创建了一个间接层。Ceph存储集群必须能够在存数据时动态的扩大（或者收缩）以及重平衡。如果客户端知道某个OSD守护进程所拥有的对象，这就在客户端和OSD守护进程创建了一个紧密的耦合。相反，CRUSH算法映射每一个对象到pg然后映射每一个pg到一个或者多个OSD守护进程。这一层费直接联接允许Ceph在新OSD守护进程上线或者失效OSD守护进程恢复时动态重平衡。下面的图描述了CRUSH如何映射对象到pgs，以及pgs到OSDs。有了集群映射和CRUSH算法，客户端可以在读写数据时精确计算出需要使用的OSD。计算PG的ID当一个客户端绑定到monitor，他会检索最新的集群映射。有了集群映射后，客户端就知道了集群中所有的monitors，OSDs，和元数据服务器。然而，它不知道人换个关于对象位置的信息。  对象的位置是通过计算得到的。客户端唯一需要的输入是对象ID和pool。很简单：Ceph存储数据在有命名的pool中（例如，”liverpool”）。当客户端想要存储有命名的对象（例如: “john”, “paul”, “george”, “ringo” 等），它会用对象名的哈希值，pool中的PGs数，pool名字俩计算pg。客户端使用如下步骤计算：1.客户端输入pool ID和对象ID（例如，pool=”liverpool”, object-id=”john”）。2.Ceph拿到对象ID然后计算哈希值。3.用哈希值取余PGs的数量（例如，58）然后得到PG ID。4.Ceph用pool获得pool ID（例如，”liverpool”=4）。5.Ceph连接pool ID到PG ID前面（例如，4.58）计算对象位置远快于在会话中查询对象位置。CRUSH算法允许客户端来计算对象要存的位置，并且允许客户端连接主OSD来存储或者检索对象。Peering and sets在前面的章节中，我们注意到OSD守护进程互相检查心跳然后报告给monitor。OSD守护进程做的另外一个是 ‘peering’ ，该方法使所有存储Placement Group(PG)的OSDs对PG中所有对象（以及他们的元数据）的状态达成一致。事实上，OSD守护进程报告对等失败给monitors。对等问题通常是自己解决；然而，如果这个问题仍然存在，可以参考Troubleshooting Peering Failure章节。  注意：状态达成一致并不意味着PGs有最新的内容。存储集群被设计为至少存储对象最新的两份拷贝（也就是size=2），这是数据安全的最小需求。为了高可用性，存储集群应该存储更多的副本（例如， size=3 和 min size=2），所以当集群处于维护数据安全的退化状态时任能够运行。回过来看支撑超大规模的智能守护进程中的图表，我们并不具体的命名每个OSD守护进程（例如，osd.0,osd.1等)，而更多的是成做主要的，第二的，以及第四的。按照惯例，主要的是活动集中的第一个，负责在作为主要的地方为每个pg协调对等进程，以及作为唯一OSD接收客户端初始的写对象到主要placememt group的请求。当一系列的OSDs负责一个pg时，我们把他们称为活动集(Acting Set)。一个活动集会设计到当前负责pg的OSD守护进程，或者在一些周期负责特定pg的OSD守护进程。活动集中部分的OSD守护进程可能并不总是 up 。当活动集中某个OSD处于 up ，他就属于 up 集。 up 集一个重要的区分，因为当OSD失效时，Ceph可以重新映射PGs到其他OSD守护进程。  注意：PG的活动集中包含 osd.25, osd.32, osd.61，第一个OSD， osd.25 就是主要的。如果哪个OSD失效了，第二的OSD， osd.32 ，就变成了主要的， osd.25 就会从Up集中移除。重平衡当添加一个OSD守护进程到存储集群时，集群映射就会用新的OSD更新。回看计算PG IDs，这会改变集群映射。因此，它改变了对象放置，因为它改变了计算的输入。下面的图描述了重平衡过程（尽管非常粗糙，因为它在大集群中基本影响很小），一些但并不是所有PGs从已有的OSDs（OSD 1和OSD 2）迁移到新的OSD（OSD 3）。就算在重平衡中，Ceph也是稳定的。许多pg仍然是原来配置，每一个OSD获得一些新的容量，所以在重平衡结束后新OSD不会出现负载峰值。数据一致性作为维护数据一致性和干净的一部分，Ceph同样可以在pg内清洗对象。也就是说，OSDs可以在一个pg内和其他OSDs的pg存储的副本比较对象元数据。清洗（通常是一天一次）捕获OSD的bugs和文件系统错误。OSD守护进程同样通过逐位比较对象中数据执行更深层的清洗。深层清洗（通常一周一次）会发现轻清洗不能发现的硬盘坏扇区。清洗的详细配置见Data Scrubbing。纠删码使用纠删码的pool存储每个对象为 K+M 块。分为K个数据块和M个编码块。该pool被配置为K+M大小，所以每个块都存在活动集中的一个OSD。块的排列存储为对象的属性。例如，使用纠删码的pool被创建有5个OSDs（K+M=5），支持两块丢失（M=2）。读写编码块当包含 ABCDEFGHI 的对象 NYAN 写到pool时，纠删码函数简单的分割内容到3个块：第一块包含 ABC ，第二块包含 DEF 和最后一块 GHI 。如果内容不是K的倍数，会添加内容直到满足。该函数同时创建了两个编码块：第四块 YXY 和第五块 GQC 。每一块都存储到活动集的OSD中。这些块会存到名字（ NYAN）相同的对象中，但是在不同的OSDs上。除了名字，块的创建顺序也必须保留，并存储在对象的属性中（ shard_t )。块1 包含 ABC ，存储在OSD5上，而块4包含 YXY 存储在OSD3上。当对象NYAN从纠删编码的pool中读数据时，解码函数读取三个块，块1 包含 ABC ，块3包含 GHI ，块4包含 YXY 。然后它重建了原始对象 ABCDEFGHI 。解码函数得知块2和块5丢失了（成为被纠删了）。块5不能读取是因为OSD4失效了。在三块读取后，解码函数就可以被调用了：OSD2最慢所以该块就没有计算在内。完全中断写在擦出编码pool中，up集中的主OSD接收所有的写操作。它负责编码有小腹在的的数据为 K+M 块，然后发送到其他OSDs。它同时负责维护pg日志的权威版本。在下面的图中，一个纠删码pg被创建为 K=2，M=1 共3个OSDs，2个放K，1个放M。pg的活动集由 OSD 1， OSD 2 和 OSD 3 组成。一个对象被编码存储到OSDs上：块D1v1（数据块 1，版本 1）在 OSD 1 上，D2v1在 OSD 2 上，C1v1（编码块 1，版本 1）在 OSD 3 上。每一个OSD的pg的日志是完全一样的(1,2 为周期1，版本1)。OSD 1是主要的，并且接收客户端的完全写入（WEITE FULL），这意味着有效负载是用来替换对象而不是覆写一部分。对象的第二版本（v2）是用来覆盖版本1（v1）。OSD 1把有效数据编码为3块：D1v2（数据块1，版本2）会在OSD1，D2v2在OSD2，C1v2（编码块1版本2）在OSD3.每一块会发送到目标OSD，包括用来存储块并且处理些操作以及维护placementgroup权威版本的主要OSD。当OSD收到写块消息时，它同时创建了pg的新记录来表示这个修改。例如，OSD 3存好C1v2后，就添加了记录 1,2（周期1，版本2）到日志。因为OSDs是异步工作的，所以会出现一些块还没有写入（例如D2v2)，而其他的已经确认写入磁盘了（例如C1v1和D1v1)如果所有操作顺利，活动集中每一个OSD都会确认写入块，并日志中的 last_complete 指针会从 1,1 移到 1,2。最终，对象的用于存储块的文件的前一个版本可以删除了：OSD1上的D1v1，OSD2上的C1v1，OSD3上的C1v1。但是以外发生了。如果D2v2还没写入时OSD1失效了，对象的版本2只写了一部分：OSD3有1个块，但是不够恢复。它就会丢失两个块：D1v2和D2v2，纠删码参数K=2,M=1需要至少2个块来重建第三块。OSD4成为了新的主要的，发现日志记录 last_complete （也就是，这条记录之前的所有对象是可以在之前的活动集的OSDs获得的）是1,1，然后这会变成新的权威日志的head。OSD3上发现的日志记录 1,2 和OSD4上新的权威日志有分歧：然后他就被抛弃了，包含块C1v2块的文件就被删除了。然后D1v1块会在数据清理时通过解码函数重建并存储新的主OSD 4。额外的细节见Erasure Code Notes缓存层缓存层可以给客户端提供后端存储层的数据子集更好的I/O表现。缓存层包含相对快速，昂贵存储设备（例如，ssd）上创建的pool，配置用来当做缓存层，以及一个后端pool，不管是纠删编码的或者是相对缓慢、便宜的设备配置为商业存储层。Ceph对象处理处理放置对象的位置，层级代理决定向缓存还是后端存储写入对象。所以，缓存层和后端存储层对客户端来说都是透明的。额外细节见Cache Tiering扩展Ceph可以通过创建共享对象类 Ceph class 来扩展Ceph。Ceph直接加载存储在 osd class dir 目录中的 .so 类（例如， 默认是$libdir/rados-classes）。当你实现一个类后，可以创建能够调用存储集群的本地方法的新的对象方法，或者其他其他类库或者你自己创建的其他类方法。在写的时候，Ceph类可以调用本地或者类方法，可以对未归纳数据（inbound data）执行任何系列操作，然后生成Ceph的原子级应用的结果写入事务。在读的时候，Ceph类可以调用本地或者类方法，可以对出站数据（outbound data）执行系列操作然后返回数据到客户端。  Ceph类样例内容管理系统的呈现特定大小和纵横比图片的Ceph类，可以读取归类的位图图像，裁剪到特定纵横比，改变大小，并嵌入不可见的版权或者水印俩帮助保护知识版权；然后保存结果位图到对象存储。可以通过 src/objclass/objclass.h ， src/fooclass.cc 和 src/barclass 查看样例实现。总结Ceph存储集群就像充满活力的有机体。然而，许多存储应用并没有完全应用典型CPU和RAM，但是Ceph做到了。从心跳，到对等，到重平衡集群或者从失效中恢复，Ceph减轻了客户端的责任（以及解除了中心化的网关，所以Ceph架构并不需要），并使用了OSDs的计算能力执行任务。参考Hardware Recommendations和Network Config Reference来理解Ceph如何利用计算资源的概念。Ceph 协议Ceph客户端使用本地协议来和存储集群交互。Ceph把这些功能打包到了 librados 库，所以可以创建你自己的客户端。下面的图描述了基本的架构。本地协议和 LIBRADOS现代应用需要一个有异步通信能力的简单对象存储接口。Ceph存储集群就提供了这样的能力。接口提供了在整个集群中直接，并行访问对象的能力。  Pool操作  快照和写入时复制的克隆  读写对象-创建或删除-整个对象或比特范围-追加或截断  创建/设置/获取/删除 扩展属性(XATTRs)  创建/设置/获取/删除 键值对  复合操作或双重确认语义  对象类对象观察/通知客户端可以对一个对象注册持久关注并保持和主OSD会话的打开。客户端可以发送一个通知消息并通过有效数据传输给所有观察者，在观察者收到通知后会收到回传通知。这使得客户端能够使用任何对象的异步通信通道。数据分段存储设备有吞吐量限制，这影响了性能和扩展性。所以，存储系统通常支持分段-向多个存储设备存储信息的连续片段-来增加吞吐量和性能。数据分片最常见的形式是RAID。和Ceph的分段最类似的是RAID 0，或者 ‘striped volume’ 。Ceph的分段提供了RAID 0分段的吞吐量，n-RAID镜像的可靠性和更快的恢复性。Ceph提供三类客户端：Ceph块设备，Ceph文件系统，Ceph对象存储。Ceph客户端把数据从它提供给用户的描述模式（一个块设备图，RESTful对象，CephFS文件系统目录）转换为用来存储到Ceph存储系统的对象。  提示： Ceph存储系统存储忽的对象并不是分段的。Ceph对象存储，Ceph块设备和Ceph文件系统在存储集群上多个对象上分段数据。客户端通过 librados 直接写到存储集群时必须执行分段（和并行I/O）来获得这些益处。Ceph分段对简单的格式是分段数为1的对象。客户端写分段单元直到对象达到最大的容量，然后创建新的对象在存储额外的分段数据。最简单的分段形式可能是足够多的小块设备，S3、Swift对象和CephFS文件。然而，这种最简单的形式美柚最大化的利用Ceph跨pg分发数据的能力，因此并没有很好的改进性能。下面的图描述了分段最简单的形式。如果需要使用大的印象，大的S3或者Swift对象（例如视频），或者大的CephFS目录，你可以看到通过在一个对象集中多个对象的分段客户端数据带来的客观的读写性能改进。当客户端并行写分段单元到对象会得到客观的写性能。自从对象映射到不同的pg以及进一步映射到不同的OSDs，每一次写都以最大的写速度并行发生。单个磁盘的写会被磁头的移动（例如，每次6ms的寻道）和单个设备的带宽（例如，100MB/s)所限制。通过在多个对象间（映射到了不同的pg和OSDs）传播写操作，Ceph可以减少每个硬盘的寻道次数并合并多个硬盘来获得更快的写（或读）速度。  注意：分段和对象副本是独立的。CRUSH通过OSDs实现副本，分段会自动复制副本。在下面的图中，客户端数据通过一个包含4个对象的对象集分段（图中的 object set 1 ），其中第一个分段单元是 strip unit 0 位于 object 0 ，第4块分段单元 stripe unit 3 位于 object 3 。在写完这4个分段后，客户端决定对象集是否满了。如果对象集没有满，客户端开始再次写分段到第一个对象（下途中的 object 0 )。如果对象集满了，客户端创建一个新的对象集（ 下图中的 object 2 )，然后开始在新对象集中的第一个对象（下图中的 object 4 ）写第一个分段（ stripe unit 16 ）。3个变量决定了Ceph如何分段数据：  Object Size: 存储集群中的对象有一个最大配置大小（例如，2MB，4MB等）。对象的大小要足够大能够容纳许多分段单元，而且应该是分段单元大小的倍数。  Stripe Width: 分段会有配置的单元大小（例如，64kb）。客户端会把要写入对象的数据划分为同样大小的分段单元，除了最后一个分段单元。分段的宽度，需要是对象大小的分数，这样一个对象才能包含许多分段单元。  Stripe Count: 客户端连续的写分段单元到一系列的对象，这一系列对象个数由stripe count决定。这一系列的对象称为对象集。在客户端写完对象集的最后一个对象后，它会返回对象集中的第一个对象。  重要：在把集群投入生产前测试你的分段配置性能。在分段好数据并写入对象后，就不能改变分段参数了。一旦客户端划分数据到段并映射分段单元到对象后，Ceph的CRUSH算法会在对象以文件形式存储到磁盘前，把对象映射到pg，以及映射pg到OSD守护进程。  注意：因为客户端写到单个pool中，所有的数据分段到的对象映射到同一个pool中的pg。所以他们使用同一个CRUSH映射和相同的访问控制。Ceph 客户端Ceph客户端包括一系列服务接口，包括：  块设备：Ceph块设备（又名RBD）服务提供可变大小，精简配置的块设备，拥有快照和克隆功能。Ceph分段集群中的块设备来获得高性能。Ceph支持内核对象（KO）和直接使用 librdb 的QEMU虚拟机-避免内核对象出现在虚拟系统上层。  对象存储：Ceph对象存储（又名，RGW）服务提供RESTful接口和Amazon S3和OpenStack Swift兼容。  文件系统：Ceph 文件系统（CephFS）服务提供POSIX兼容的文件系统，可以使用 mount 作为文件系统或者在用户空间（FUSE）。Ceph可以运行额外的OSDs，MDSs和Monitors实例来扩展和获得高可用性。下图描述了上层架构。Ceph对象存储Ceph的对象存储守护进程， radisgw ，是一个FastCGI服务，提供RESTful HTTP API来存储对象和元数据。它有自己的数据格式，位于Ceph存储集群的顶层，并维护自己的用户数据库，授权和访问控制。RADOS网关使用统一的命名空间，这意味着，你可以使用OpenStack Swift兼容的API或者Amazon S3兼容的API。例如，你可以在一个应用用S3兼容的API写数据然后在另一个应用用Swift兼容的API来读数据。  S3/Swift对象和存储集群对象比较Ceph的对象存储使用术语 对象 来描述存储的数据。S3和Swift对象和Ceph写到存储集群的对象并不一样。Ceph对象存储的对象是映射到Ceph存储集群的对象。S3和Swift对象并不需要和存储集群存储的对象以1:1的方式符合。S3或者Swift的对象映射到多个Ceph对象也是可以的。详见Ceph对象存储Ceph块设备Ceph块设备在存储系统多个对象间分段块设备镜像，每个对象映射到pg并分发，pg在整个集群中独立的 ceph-osd 守护进程之间传播。  分段技术可以使RBD块设备比单个服务器表现更好！精简配置且可快照的块设备对虚拟化和云计算来说是吸引人的选项。在虚拟机场景，人们通常在Qemu/KVM部署Ceph块设备到有rbd的网络存储驱动，主机机器使用 librbd 来提供块设备服务给客户。许多云计算服务商使用 libvirt 来融合虚拟管理系统。相比其他解决方案，你可以使用精简配置的Ceph块设备和Qemu， libvirt 来提供OpenStack和CloudStack服务。虽然我们当前的 librbd 不支持其他的虚拟管理系统，你同样可以使用Ceph块设备内核对象来提供块给设备。其他虚拟技术例如Xen可以访问Ceph的块设备内核对象。这些可以通过命令行工具 rbd 。Ceph文件系统在基于对象的Ceph存储集群的上层，Ceph文件系统（CephFS）提供POSIX兼容的文件系统来作为服务。CephFS文件映射Ceph存储集群存储的到对象。Ceph客户端把Ceph文件系统作为内核对象或者用户空间的文件系统（FUSE）挂载。Ceph文件系统服务包括存储集群部署的Ceph元数据服务器（MDS）。MDS的目的是存储所有的文件系统元数据（目录，文件拥有者，访问模式等）到高可靠性的元数据服务器，其上的元数据都驻留在内存。MDS（称为 ceph-mds ）存在的原因是简单文件系统操作像列出目录或者改变目录（ls，cd）没有必要加重OSD守护进程的负担。所以从数据意义中分离元数据意味着Ceph文件系统可以提供高性能服务而不用涉及存储集群。CephFS从数据中分离元数据，存储元数据到MDS，并存储文件数据到存储集群的一个或多个对象。Ceph文件系统致力于POSIX兼容性。Ceph-mds可以运行为单个进程。或者他可以分发到多个物理机器，同样是为了高可用性和扩展性。  高可用性：额外的 ceph-mds 实例可以作为后备，准备接管任何失效 ceph-mds 的职责。这很容易，因为所有的数据，包括日志卷，都保存在RADOS。这类转移会通过 ceph-mon 自动触发。  扩展性：多个 ceph-mon 实例可以处于活跃状态，他们会把目录树分割为子树（并为繁忙的目录分片），高效的平衡所有在线服务的负载。后备和活跃状态的组合是可能的，例如运行3个活跃的 ceph-mds 实例用来扩展，一个后备实例保障高可用性。"
+}, 
+
+{
+"id": "-blog-highlight",
+"title": "jekyll 语法高亮",
+"author": null,
+"tags": ["blog"],
+"url": "/blog-highlight/",
+"date": "2015-03-05",
+"content": "记录折腾博客语法高亮的问题。博客解析换成kramdown后，语法高亮的问题。配置，在 _config.yml 中添加如下。使用kramdown解析页面，使用pygments来语法高亮。markdown: kramdownhighlighter: pygmentskramdown的配置解释pygments支持的语法高亮格式，注意去掉{和%之间的空格。def xx():    code herepygments支持的语言列表krmadown 支持和github一样的语法高亮，用三个 ```，但是需要安装coderay，而github pages上不支持coderay，所以该方式无法搞定，可行的解决方法是上传本地编译好的html。如果是本地或者自己的空间，可以安装coderay。gem install coderay"
+}, 
+
+{
+"id": "-LVM",
+"title": "Linux LVM逻辑卷的配置",
+"author": null,
+"tags": ["lvm"],
+"url": "/LVM/",
+"date": "2015-03-04",
+"content": "LVM全程Logical Volume Manager 逻辑卷管理器，是Linux对磁盘分区进行管理的一种机制，是建立在硬盘和分区之上、文件系统之下的一个逻辑层，可提高磁盘分区管理的灵活性。要创建逻辑卷，首先要创建物理卷PV（Physical Volume），然后卷组VG（Volume Group），最后逻辑卷LV（Logical Volume）。Ceph的单机版本部署参考博客，为集群准备OSD空间。注意，分配的OSD空间要大于配置文件Ceph.conf中 osd journal size  ，单位为MB。创建LVM准备磁盘空间， 这一步使用逻辑卷进行操作  准备空闲分区为： 我的ubuntu在虚拟机，通过扩容后新建分区（可以通过fdisk命令） /dev/sda3  创建物理卷： pvcreate /dev/sda3          参数： pvcreate 物理卷      用于将物理硬盘分区初始化为物理卷，以便被LVM使用，需要空闲分区。        创建LVM卷组： vgcreate ceph /dev/sda3          参数： vgcreate 卷组名 物理卷列表      将多个物理卷组织成一个整体，屏蔽了底层物理卷细节。在卷组创建逻辑卷时不用考虑具体的物理卷信息。            创建三个LVM的逻辑卷， 分别用于创建三个osd    lvcreate -n 逻辑卷名 -L 逻辑卷大小 逻辑卷 sudo lvcreate -n osd.0 -L 1G ceph sudo lvcreate -n osd.1 -L 1G ceph sudo lvcreate -n osd.2 -L 1G ceph  扩展LVM要确保逻辑卷所在卷组有足够的空闲空间可用。先扩展物理边界，再扩展逻辑边界。      扩展物理边界    sudo lvextend -L 2G /dev/ceph/osd.0    输入命令 lvs 时，已经可以看到大小已经变为2G。 注意，-L后的大小是扩展到的大小，不是多增的大小。        扩展逻辑边界    sudo resize2fs /dev/ceph/osd.0    注意          resize2fs 工具只适用于 ext2、ext3、ext4 .      xfs 系统可以使用 xfs_growfs      btrfs系统可以使用 sudo btrfs filesystem resize [+/-]&lt;newsize&gt;[gkm]|max &lt;path&gt; ，其中为挂在后的路径      删除逻辑卷lvremove [选项] [参数]  选项-f 强制删除  参数逻辑卷 指定要删除的逻辑卷注意，如果逻辑卷已经mount，需要先umount，如果出现设备忙，可以加上选项 -l"
+}, 
+
+{
+"id": "-ceph-deploy",
+"title": "Ceph 源码部署",
+"author": null,
+"tags": ["ceph"],
+"url": "/ceph-deploy/",
+"date": "2015-03-02",
+"content": "源码的编译见Ceph CompileCeph 0.87， 系统ubuntu参考官方配置文档集群需要至少1个monitor和2个OSD（对应两个副本）集群的配置会按照如下的结构，node1作为monitor，node2和node3作为OSD节点。配置monitor1.登录到monitor节点ssh {hostname}2.Ceph的默认配置目录是 /etc/ceph 。创建配置文件，默认是 ceph.conf ，其中ceph表示集群名3.集群ID#生成集群唯一IDuuidgen#把ID添加到配置文件fsid={UUID}4.添加初始monitor(s)和IP地址到配置文件mon initial menbers = {hostname}[,{hostname}]mon host = {ip-address}[,{ip-address}]Note: 如果是IPv6，需要设置 ms bind ipv6 为 true，参考Network Configuration Reference。5.创建集群密钥环#为monitor生成密钥ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'#生成 `client.admin` 用户并添加该用户到密钥环sudo ceph-authtool --create-keyring /etc/ceph/ceph.client.admin.keyring --gen-key -n client.admin --set-uid=0 --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow'#添加 `client.admin` 密钥到 `ceph.mon.keyring`sudo ceph-authtool /tmp/ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring6.使用hostname，IP地址和FSID生成monitor映射。保存为 /tmp/monmapmonmaptool --create --add {hostname} {ip-address} --fsid {uuid} /tmp/monmap#例如：monmaptool --create --add ubuntu 192.168.230.128 --fsid 6d3c75f6-458b-4b29-b65f-e3083e7240db /tmp/monmap7.在monitor上创建一个默认的数据目录sudo mkdir -p /var/lib/ceph/mon/{cluster-name}-{hostname}#例如：sudo mkdir -p /var/lib/ceph/mon/ceph-ubuntu详细配置见Monitor Config Reference - Data8.将monitor映射和密钥环添加到monitor守护进程sudo ceph-mon --mkfs -i {hostname} --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring#例如sudo ceph-mon --mkfs -i ubuntu --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring#实测，上一步创建文件夹可以不做，这一步会默认在/var/lib/ceph/mon/下创建对应文件夹9.配置模板[global]    fsid = {cluster-id}    mon initial members = {hostname}[, {hostname}]    mon host = {ip-address}[, {ip-address}]    public network = {network}[, {network}]    cluster network = {network}[, {network}]    auth cluster required = cephx    auth service required = cephx    auth client required = cephx    osd journal size = {n}    filestore xattr use omap = true    osd pool default size = {n}  # Write an object n times.    osd pool default min size = {n} # Allow writing n copy in a degraded state.    osd pool default pg num = {n}    osd pool default pgp num = {n}    osd crush chooseleaf type = {n}根据前面的配置，得到：[global]    fsid = 6d3c75f6-458b-4b29-b65f-e3083e7240db    mon initial members = ubuntu    mon host = 192.168.230.128    public network = 192.168.230.0/24    auth cluster required = cephx    auth service required = cephx    auth client required = cephx    osd journal size = 1024    filestore xattr use omap = true    osd pool default size = 2    osd pool default min size = 1    osd pool default pg num = 333    osd pool default pgp num = 333    osd crush chooseleaf type = 110.新建 done 文件#标记monitor已经创建，准备好启动了。sudo touch /var/lib/ceph/mon/ceph-ubuntu/done11.启动monitor  在Ubuntu，使用Upstartsudo start ceph-mon id=ubuntu#要允许守护进程在每次重启后启动必须创建空文件，如下：sudo touch /var/lib/ceph/mon/{cluster-name}-{hostname}/upstart#例如：sudo touch /var/lib/ceph/mon/ceph-ubuntu/upstart  启动monitor的时候如果遇到 start: Unknown job: ceph-mon, 是因为使用 make install 安装时不会安装 upstart script ， 可以手动将 src/upstart 中的脚本复制到 /etc/init/ ，但是该方法有个问题，应为编译安装的目录是/usr/local/bin，但upstart中配置文件的启动目录是/usr/bin，所以需要手动修改ceph-mon.conf中两处代码， `pre-start’ 中的test路径，和exec的执行路径。不知道有没有更好的方法。  对于 Debian/CentOs/RHEL，使用sysvinit：sudo /etc/init.d/ceph -c /etc/ceph/ceph.conf start mon.{hostname}注意#centos下，也需要将ceph手动添加到启动项sudo cp ceph/src/init-ceph /etc/init.d/ceph#需要在mon数据目录添加sysvinit，在原文没有，不加的话会出现 mon.hostname not foundsudo touch /var/lib/ceph/mon/ceph-ubuntu/sysvinit12.验证Ceph创建的默认池ceph osd lspools#输出如下：0 rbd，      如果出现 python的import xx找不到，需要把ceph/src/pybind包含到Python查找路径下，例如，在.bashrc中, export PYTHONPATH=$PYTHONPATH:~/ceph/src/pybind    如果出现 OSError: librados.so.2 ，需要安装librados包(sudo apt-get install librados-dev)，详见librados-intro    如果出现 missing keyring, cannot use cephx for authentication ，需要修改keyring的属性，详见auth-config-ref  12.验证monitor正在运行ceph -s#输出如下：cluster 6d3c75f6-458b-4b29-b65f-e3083e7240db health HEALTH_ERR 64 pgs stuck inactive; 64 pgs stuck unclean; no osds monmap e1: 1 mons at {ubuntu=192.168.230.128:6789/0}, election epoch 2, quorum 0 ubuntu osdmap e1: 0 osds: 0 up, 0 in pgmap v2: 64 pgs, 1 pools, 0 bytes data, 0 objects        0 kB used, 0 kB / 0 kB avail        64 creating添加OSDmonitor启动后，就可以添加OSDs了。只有当集群有足够OSDs来处理object的副本时，集群才能达到 active+clean状态（例如，osd pool default size=2 需要至少两个OSDs）。 在monitor引导启动后，集群有了默认的CRUSH映射，然而，映射中还没有任何Ceph OSD 的守护进程映射到Ceph节点。简单配置Ceph提供了 ceph-disk 工具，可以处理磁盘、分区或者目录。该工具通过自增的索引来创建OSD ID。并且该工具会把新的OSD自动添加到主机的CRUSH映射。执行 ceph-disk -h 来获得命令的详细信息。工具会自动执行下面复杂配置的流程。1.准备OSDssh {node-name}sudo ceph-disk prepare --cluster {cluster-name} --cluster-uuid {uuid} --fs-type {ext4|xfs|btrfs} {data-path} [{journal-path}]#例如sudo ceph-disk prepare --cluster ceph --cluster-uuid a7f64266-0894-4f1e-a635-d0aeaca0e993 --fs-type ext4 /dev/hdd12.激活OSDsudo ceph-disk activate {data-path} [--activate-key {path}]#例如sudo ceph-disk activate /dev/hdd1Note: 如果Ceph节点上没有 /var/lib/ceph/bootstrop-osd/{cluster}.keyring 需要添加参数 --activate-key 。复杂配置不利用工具的情况下，可以通过如下配置实现创建OSD，添加OSD到CRUSH映射。通过下面的过程可以更好的了解整个过程。分别登录node2和node3执行以下步骤。1.登录到OSD主机ssh {node-name}2.为OSD生成UUIDuuidgen3.创建OSD，如果不设置UUID，在OSD启动时会自动设定。该命令会输出OSD的编号，在下面的步骤中会用到。ceph osd create [{uuid}]4.在新的OSD上创建默认目录sudo mkdir -p /var/lib/ceph/osd/ceph-{osd-number}5.如果OSD是硬盘而不是系统，需要挂载到刚创建的目录sudo mkfs -t {fstype} /dev/{hdd}sudo mount -o user_xattr /dev/{hdd} /var/lib/ceph/osd/ceph-{osd-number}#user_xattr 表示启用扩展的用户属性#如果格式化为btrfs文件系统，且出现 `mkfs.btrfs: no such file or directory` ，需要安装btrfs，sudo apt-get install btrfs-tools #如果使用btrfs文件系统，则在mount时不需要 user_xattr 选项，该项btrfs默认支持该选项，否则会出错。6.初始化OSD的数据目录ssh {new-osd-host}sudo ceph-osd -i {osd-num} --mkfs --mkkey --osd-uuid [{uuid}]在运行 ceph-osd --mkkey 之前，该目录必须是空的。并且，ceph-osd 工具需要用参数 --cluster 指定自定义的集群名。注意  OSD的大小要略于配置文件中的 osd journal size ，配置单位为MB。  如果因为配置错误，需要删除osd的挂载目录，该目录是带有只读属性的，可以用chattr修改7.注册OSD的认证密钥。路径中 ceph-{osd-num} 的 ceph 值为 $cluster-$id 。如果集群名不是 ceph , 使用你对应的集群名。sudo ceph auth add osd.{osd-num} osd 'allow *' mon 'allow profile osd' -i /var/lib/ceph/osd/ceph-{osd-num}/keyring8.添加Ceph节点到CRUSH映射中ceph osd crush add-bucket {hostname} host9.把Ceph节点放到根节点 default 下ceph osd crush move node1 root=default10.把OSD添加到CRUSH映射，这样就可以开始接受数据了。 同样也可以反编译CRUSH的映射，把OSD添加到设备列表，把主机作为一个bucket(在它还没有加入CRUSH映射前），在主机中把设备当做项目添加，指定一个权重后重新编译并设置。ceph osd crush add {id-or-name} {weight} [{bucket-type}={bucket-name} ...]#例如ceph osd crush add osd.0 1.0 host=node111.在添加一个OSD到Ceph后，OSD就在配置文件中了。但是还没有运行，OSD处于 down 和 in 状态。必选启动新的OSD才能开始接收数据。  Ubuntu中，使用Upstartsudo start ceph-osd id={osd-num}#例如：sudo start ceph-osd id=0注意，和monitor一样，需要复制 src/upstart 下的 ceph-osd 到 /etc/init/ ，同时需要修改文件中 /usr/bin 为 /usr/local/bin， /usr/libexec 为 /usr/local/libexec 。  Debian/CentOS/RHEL中，使用sysvintsudo /etc/init.d/ceph start osd.{osd-num}#例如：sudo /etc/init.d/ceph start osd.0#注意：sysvint下需要创建如下的空文件sudo touch /var/lib/ceph/osd/{cluster-name}-{osd-num}/sysvinit#例如：sudo touch /var/lib/ceph/osd/ceph-0/sysvinit一旦启动了OSD，它就处于 up 和 in 状态。总结一旦有了monitor和两个OSD启动并运行，通过如下的执行可以查看placement groups节点。ceph -w#查看OSD树：   ceph osd tree#将会看到如下信息：    # id    weight  type name   up/down reweight    -1  2   root default    -2  2       host ubuntu    0   1           osd.0       up      1       1   1           osd.1       up      1要添加或移除额外的monitors，详见Add/Remove Monitors。要添加或移除额外的Ceph OSD守护进程，详见Add/Remove OSDs。注意，monitor和OSD的通信需要在防火墙添加例外，centos 6是iptables，centos 7是firewall。"
+}, 
+
+{
+"id": "-ceph-code-structure",
+"title": "Ceph 代码分析",
+"author": null,
+"tags": ["ceph"],
+"url": "/ceph-code-structure/",
+"date": "2015-02-25",
+"content": "Ceph代码的目录结构。  网络通信          msg 目录包括了网络传输的代码      message 目录里定义了传输的消息格式        元数据服务器          mds 目录包括 metadata server 代码        数据服务器          os 目录里包含了 object store 的代码      osd 目录包括了 object storage device 的代码        客户端          osdc 目录里包括跨网络访问 osd 的代码      librados 包括了对象存储的客户端操作的代码      librbd, rgw, client  客户端代码，其代码都是基于 librados 之上        监控          mon 目录里包括了 Ceph Monitor的代码        存储映射算法          crush 目录里包括了 cursh 算法的代码      "
+}, 
+
+{
+"id": "-ceph-compile",
+"title": "Ceph 编译",
+"author": null,
+"tags": ["ceph"],
+"url": "/ceph-compile/",
+"date": "2015-02-23",
+"content": "初学ceph，记录下编译过程。Ceph发展优势：是OpenStack热门的开源存储。Ceph核心思想* “算算就好，无需查表”，通过数据ID的简单计算，就可以得到数据的存储位置。* 充分利用存储节点的计算能力，在服务器端进行数据处理。编译使用版本Ceph-0.87，系统Ubuntu 14.04，从源码编译安装。      ./autogen.sh        ./configure        需要很多依赖包    sudo apt-get install uuid-dev libblkid-dev libudev-dev libkeyutils-dev libfuse-dev libedit-dev libatomic-ops-dev libsnappy-dev libleveldb-dev libaio-dev xfslibs-dev libboost-dev libboost-thread-dev libcrypto++-dev libcrypto++-doc libcrypto++-utils libgoogle-perftools-dev        其中 no tcmalloc found 的手动安装方法。tcmalloc是Google Preftools内的一个组件，可以通过如下方法安装。          step 1. linux 64位先安装libunwind，32位不需要        wget http://download.savannah.gnu.org/releases/libunwind/libunwind-1.1.tar.gz  tar zxvf libunwind-1.1.tar.gz  cd libunwind-1.1/  CFLAGS=-fPIC ./configure –enable-shared  make CFLAGS=-fPIC  make CFLAGS=-fPIC install          step 2. 安装Google Performance Tools        wget https://gperftools.googlecode.com/files/gperftools-2.4.tar.gz  tar zxvf gperftools-2.4.tar.gz  cd gpehttp://blog.coolceph.com/?p=85rftools-2.4/  ./configure  make -j8  make install  sudo sh -c ‘echo “/usr/local/lib” &gt; /etc/ld.so.conf.d/usr_local_lib.conf’  /sbin/ldconfig    make机器配置不好的话，编译需要时间比较长。可以使用”make -j”增加并发度，8表示同时执行的make方法数。      sudo make install    可执行文件会安装在 /usr/lcoal/bin ，这里有个坑，通过ceph-deploy安装的可执行文件会在 /usr/bin 会有不一样。  centosgit clone https://github.com/ceph/ceph.git注意切换到一个release版本cd ceph./install-deps.sh./autogen.sh./configuremake -j4sudo make install (可选)  注：需要安装epel源sudo yum install epel-release &amp;&amp; sudo yum update -yCPU 4核 内存 4G 参数 -j4，编译大概需要20分钟。"
+}, 
+
+{
+"id": "-sublime",
+"title": "Sublime相关",
+"author": null,
+"tags": ["sublime"],
+"url": "/sublime/",
+"date": "2015-02-21",
+"content": "记录使用sublime遇到的问题。安装sudo add-apt-repository ppa:webupd8team/sublime-text-2sudo apt-get updatesudo apt-get install sublime-text设置  tab设置  “tab_size”: 4   // 设置tab大小  “translate_tabs_to_spaces”: true    // 设置tab用对应空格个数替换插件      markdown支持用的markdown preview，安装配置教程        html 格式化HTML-CSS-JS Prettify快捷键 Ctrl+Shift+H  "
+}, 
+
+{
+"id": "-github-blog",
+"title": "搭建github博客",
+"author": null,
+"tags": ["blog"],
+"url": "/github-blog/",
+"date": "2015-02-19",
+"content": "记录下搭建本地jekyll环境遇到的问题。  主要搭建的步骤，参考github说明。  在安装bundler时，会出现某些包安装失败，可以先按提示尝试手动安装。如果出现nokogiri安装失败，参照stackoverflow需要安装完整的rvm依赖。  运行Jekyll时出现ExecJS环境问题，参考网上意见，简单的方法就是直接安装Node.js，具体的步骤可以参考博客。搭建成功后，运行 bundle exec jekyll serve ，即可在 http://127.0.0.1:4000/blog/ 看到网页。其他      ubuntu sublime的中文输入问题，参考博客。如果安装的是sublime2，注意要修改 源（改成2）  和快捷方式代码中 Exec值中文件夹sublime_text改成sublime_text_2 。    基本步骤：参考阮一峰的博客。  另一篇详细点的博客"
+}, 
+
+{
+"id": "-hello-world",
+"title": "hello world",
+"author": null,
+"tags": [],
+"url": "/hello-world/",
+"date": "2015-02-18",
+"content": "新年愿望，自己能够坚持写下来。"
+}
+
+]
+
+  </div>
+</div>
+
+    <div class="page__footer">
+      <footer>
+        
+
+<div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>Follow:</strong></li>
+    
+    
+    
+    
+      <li><a href="http://github.com/tianshan"><i class="fa fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+    
+    
+    <li><a href="http://tianshan.github.io/feed.xml"><i class="fa fa-fw fa-rss-square" aria-hidden="true"></i> Feed</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2018 tianshan. Powered by <a href="http://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+      </footer>
+    </div>
+
+    <script src="http://tianshan.github.io/assets/js/main.min.js"></script>
+
+
+
+
+  <script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-60561225-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+    <!-- start custom footer snippets -->
+
+<!-- end custom footer snippets -->
+
+  </body>
+</html>
+

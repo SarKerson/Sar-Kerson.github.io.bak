@@ -1,0 +1,443 @@
+
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+
+<meta charset="utf-8">
+
+
+
+<!-- begin SEO -->
+
+
+
+
+
+
+
+
+
+<title>MemStore源码分析 - tianshan’s blog</title>
+
+
+
+
+
+
+
+<meta property="og:locale" content="en-US">
+<meta property="og:site_name" content="tianshan's blog">
+<meta property="og:title" content="MemStore源码分析">
+
+
+  <link rel="canonical" href="http://tianshan.github.io/ceph-memstore/">
+  <meta property="og:url" content="http://tianshan.github.io/ceph-memstore/">
+
+
+
+  <meta property="og:description" content="MemStore总体的结构比较简单，Object通过Collection的概念来组织Object，每个Collection有两个结构存储Object映射。">
+
+
+
+
+
+  
+
+  
+
+
+
+
+
+  <meta property="og:type" content="article">
+  <meta property="article:published_time" content="2015-07-02T00:00:00+08:00">
+  
+    <link rel="next" href="http://tianshan.github.io/ceph-rpm/" title="Ceph源码构建并安装">
+  
+  
+    <link rel="prev" href="http://tianshan.github.io/ceph-readwrite/" title="Ceph读写流程分析">
+  
+
+
+
+
+
+  <script type="application/ld+json">
+    {
+      "@context" : "http://schema.org",
+      "@type" : "person",
+      "name" : "tianshan",
+      "url" : "http://tianshan.github.io",
+      "sameAs" : null
+    }
+  </script>
+
+
+
+
+
+
+<!-- end SEO -->
+
+<link href="http://tianshan.github.io/feed.xml" type="application/atom+xml" rel="alternate" title="tianshan's blog Feed">
+
+<!-- http://t.co/dKP3o1e -->
+<meta name="HandheldFriendly" content="True">
+<meta name="MobileOptimized" content="320">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="http://tianshan.github.io/assets/css/main.css">
+
+<meta http-equiv="cleartype" content="on">
+    <!-- start custom head snippets -->
+
+<!-- insert favicons. use http://realfavicongenerator.net/ -->
+
+<!-- end custom head snippets -->
+  </head>
+
+  <body>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="http://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        <button><div class="navicon"></div></button>
+        <ul class="visible-links">
+          <li class="masthead__menu-item masthead__menu-item--lg"><a href="http://tianshan.github.io/">tianshan's blog</a></li>
+          
+            
+            <li class="masthead__menu-item"><a href="http://tianshan.github.io/about/">About</a></li>
+          
+        </ul>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+    
+
+
+
+
+
+<div id="main" role="main">
+  
+
+
+  <div class="sidebar sticky">
+  
+
+
+
+<div itemscope itemtype="http://schema.org/Person">
+
+  <div class="author__avatar">
+    
+    	<img src="http://tianshan.github.io/images/ts.jpg" class="author__avatar" alt="tianshan">
+    
+  </div>
+
+  <div class="author__content">
+    <h3 class="author__name">tianshan</h3>
+    <p class="author__bio">笔记</p>
+  </div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">Follow</button>
+    <ul class="author__urls social-icons">
+      
+        <li><i class="fa fa-fw fa-map-marker" aria-hidden="true"></i> Somewhere</li>
+      
+      
+      
+        <li><a href="mailto:qutianshan0214@163.com"><i class="fa fa-fw fa-envelope-square" aria-hidden="true"></i> Email</a></li>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+        <li><a href="https://github.com/tianshan"><i class="fa fa-fw fa-github" aria-hidden="true"></i> Github</a></li>
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="http://schema.org/CreativeWork">
+    <meta itemprop="headline" content="MemStore源码分析">
+    <meta itemprop="description" content="MemStore总体的结构比较简单，Object通过Collection的概念来组织Object，每个Collection有两个结构存储Object映射。">
+    <meta itemprop="datePublished" content="July 02, 2015">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+          <h1 class="page__title" itemprop="headline">MemStore源码分析
+</h1>
+          
+        </header>
+      
+
+      <section class="page__content" itemprop="text">
+        <p>MemStore总体的结构比较简单，Object通过Collection的概念来组织Object，每个Collection有两个结构存储Object映射。</p>
+
+<!--more-->
+
+<p>下图的MemStore的关键内容，左侧是事务处理函数，右图是主要的类图</p>
+
+<p><img src="/images/objectstore/memstore.jpg" alt="memstore" /></p>
+
+<h3 id="section">关键变量</h3>
+
+<ul>
+  <li>object_hash<br />
+  object的hash结构，使用了STL的unordered_map，类似于Java的HashMap。 object可以快速定位</li>
+  <li>object_map<br />
+  object的map结构，使用了STL的map，类似于Java的TreeMap，内部是红黑树实现。object可以快速遍历访问</li>
+  <li>lock<br />
+  涉及到object_hash/map 的写修改，都会上锁</li>
+</ul>
+
+<p>还没看的点</p>
+
+<p>1.分多个Collection的作用(对应不同pool？)<br />
+2.omap的映射还没整理</p>
+
+<h3 id="section-1">关键函数</h3>
+
+<ul>
+  <li>
+    <p><code class="highlighter-rouge">read(cid,oid,offset,len,bl,op_flags,allow_eio)</code><br />
+读的情况比较简单，有读的请求会直接调用本函数。
+主要流程
+c=get_collection(cid) -&gt; RLocker (c-&gt;lock) -&gt; ObjectRef o=c-&gt;get_object(oid)
+-&gt; offset检查 –&gt; len检查 –&gt; bl.substr_of(o-&gt;data, offset, l)</p>
+  </li>
+  <li>
+    <p><code class="highlighter-rouge">_load()</code><br />
+通过文件加载collections和object信息到内存
+首先读取 ObjectStore path/collections 文件，包含了以path/cid为名字的各个collection文件，再从文件中依次decode出object。</p>
+  </li>
+  <li>
+    <p><code class="highlighter-rouge">_write(cid, oid, offset, len, bl, fadviseflags)</code><br />
+从写事务中decode出各项参数，然后就调用了本函数。<br />
+主要流程<br />
+c=get_collection(cid)<br />
+-&gt; WLock (c-&gt;lock) <br />
+-&gt; ObjectRef o=c-&gt;get_object(oid) (if not exists, then create and add to c ) <br />
+-&gt; _write_into_bl(bl, offset, &amp;o-&gt;data) write bufferlist data into object</p>
+  </li>
+  <li>
+    <p><code class="highlighter-rouge">_write_into_bl(src, offset, dst)</code><br />
+将src数据写到dst的offset位置后面。<br />
+实现步骤，新建bufferlist newdata，先拷贝dst到newdata，如果长度小于offset，则补0，然后将src数据append在newdata后面，最后dst的数据重新映射到newdata</p>
+  </li>
+  <li>
+    <p><code class="highlighter-rouge">_truncate(cid, oid, size)</code><br />
+调整object大小
+如果size&lt;o.len，复制o的前面size大小数据到新的bl，然后o重新映射到新的bl；
+如果size&gt;o.len，新建size-o.len长度的bl，补0后append在o后面</p>
+  </li>
+  <li>
+    <p><code class="highlighter-rouge">_remove(cid, oid)</code><br />
+从cid的collection的object_map和object_hash中删除oid</p>
+  </li>
+  <li>
+    <p><code class="highlighter-rouge">_clone(cid, oldoid, newoid)</code><br />
+找到newoid对应对象，如果没有则新建。然后将newoid的data，omap_header, omap, xattr映射到oldoid的对应数据。</p>
+  </li>
+  <li>
+    <p><code class="highlighter-rouge">_clone_range(cid, oldoid, newoid, srcoff, len, dstoff)</code> <br />
+从oldoid的scroff开始，克隆len长的数据到newoid的dstoff后面。</p>
+  </li>
+  <li>
+    <p><code class="highlighter-rouge">_create_collection(cid)</code>和<code class="highlighter-rouge">_destory_collection(cid)</code><br />
+collection的创建和销毁</p>
+  </li>
+</ul>
+
+
+        
+      </section>
+
+      <footer class="page__meta">
+        
+        
+
+
+  
+
+
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fa fa-fw fa-tags" aria-hidden="true"></i> Tags: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="http://tianshan.github.io/tags/#ceph" class="page__taxonomy-item" rel="tag">ceph</a>
+    
+    </span>
+  </p>
+
+
+
+
+        
+          <p class="page__date"><strong><i class="fa fa-fw fa-calendar" aria-hidden="true"></i> Updated:</strong> <time datetime="2015-07-02T00:00:00+08:00">July 02, 2015</time></p>
+        
+      </footer>
+
+      
+
+      
+
+
+  <nav class="pagination">
+    
+      <a href="http://tianshan.github.io/ceph-readwrite/" class="pagination--pager" title="Ceph读写流程分析
+">Previous</a>
+    
+    
+      <a href="http://tianshan.github.io/ceph-rpm/" class="pagination--pager" title="Ceph源码构建并安装
+">Next</a>
+    
+  </nav>
+
+    </div>
+
+    
+      
+
+<div class="page__comments">
+  <h4 class="page__comments-title">Leave a Comment</h4>
+  
+    <section id="disqus_thread"></section>
+  
+</div>
+    
+  </article>
+
+  
+  
+</div>
+
+    <div class="page__footer">
+      <footer>
+        
+
+<div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>Follow:</strong></li>
+    
+    
+    
+    
+      <li><a href="http://github.com/tianshan"><i class="fa fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+    
+    
+    <li><a href="http://tianshan.github.io/feed.xml"><i class="fa fa-fw fa-rss-square" aria-hidden="true"></i> Feed</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2018 tianshan. Powered by <a href="http://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+      </footer>
+    </div>
+
+    <script src="http://tianshan.github.io/assets/js/main.min.js"></script>
+
+
+
+
+  <script type="text/javascript">
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-60561225-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+
+
+
+
+  
+  <script type="text/javascript">
+  	/* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+  	var disqus_shortname = 'tianshan';
+
+  	/* * * DON'T EDIT BELOW THIS LINE * * */
+  	(function() {
+  		var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+  		dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+  		(document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+  	})();
+
+  	/* * * DON'T EDIT BELOW THIS LINE * * */
+  	(function () {
+  		var s = document.createElement('script'); s.async = true;
+  		s.type = 'text/javascript';
+  		s.src = '//' + disqus_shortname + '.disqus.com/count.js';
+  		(document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+  	}());
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+
+
+
+
+    <!-- start custom footer snippets -->
+
+<!-- end custom footer snippets -->
+
+  </body>
+</html>
+

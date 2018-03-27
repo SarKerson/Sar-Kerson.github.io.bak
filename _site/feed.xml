@@ -1,0 +1,346 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom"><generator uri="http://jekyllrb.com" version="3.0.5">Jekyll</generator><link href="http://tianshan.github.io/feed.xml" rel="self" type="application/atom+xml" /><link href="http://tianshan.github.io/" rel="alternate" type="text/html" /><updated>2018-03-27T08:39:34+08:00</updated><id>http://tianshan.github.io/</id><title>tianshan&#39;s blog</title><subtitle>tianshan&#39;s blog</subtitle><author><name>tianshan</name><email>qutianshan0214@163.com</email></author><entry><title>Ceph RGW multipart 上传简析</title><link href="http://tianshan.github.io/ceph-rgw-multipart/" rel="alternate" type="text/html" title="Ceph RGW multipart 上传简析" /><published>2016-07-11T00:00:00+08:00</published><updated>2016-07-11T00:00:00+08:00</updated><id>http://tianshan.github.io/ceph-rgw-multipart</id><content type="html" xml:base="http://tianshan.github.io/ceph-rgw-multipart/">&lt;p&gt;最近研究了跟了Ceph的RGW S3协议的multipart的一个&lt;a href=&quot;http://tracker.ceph.com/issues/15886&quot;&gt;bug15886&lt;/a&gt;，顺着bug分析了下多块上传的流程。问题主要是多块上传中，如果有相同upload id的重传，就有可能丢数据，目前H版和J版都已修复，并在s3-tests的master分支添加了对应的测试用例&lt;code class=&quot;highlighter-rouge&quot;&gt;test_multipart_resend_first_finishes_last&lt;/code&gt;。&lt;/p&gt;
+
+&lt;p&gt;Multipart是客户端发起的一个分块上传的协议。首先是一个POST消息，请求upload id，然后就是每一块的PUT上传，PUT过程类似普通块的上传。
+如下图，是multipart的put流程图。出错逻辑主要是函数&lt;code class=&quot;highlighter-rouge&quot;&gt;add_written_obj&lt;/code&gt;，他的作用是，记录正在写的对象，如果出错，那么会在销毁processor时清除该对象。问题在于原来函数调用位置在&lt;code class=&quot;highlighter-rouge&quot;&gt;handle_obj_data&lt;/code&gt;，也就是写对象之前，导致对象重复时，实际没有写入，但把原来正确的对象清除了。修正后在&lt;code class=&quot;highlighter-rouge&quot;&gt;throttle_data&lt;/code&gt;中调用，改在对象写成功后，就不会有问题了。&lt;/p&gt;
+
+&lt;p&gt;测试的用例是，先写A，然后以重传形式写B，然后complet B，再完成A。这时实际对象内容应该是A。在B写入时，发现upload id相同的分片存在，就会重新生成临时upload id，保证不重复，所以B也就是一个临时对象，最后complete的A为实际对象内容。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/images/2016-07-11-ceph-rgw-multipart.png&quot; alt=&quot;Ceph RGW Multipart 流程图&quot; /&gt;&lt;/p&gt;</content><author><name>tianshan</name><email>qutianshan0214@163.com</email></author><category term="ceph" /><summary>最近研究了跟了Ceph的RGW S3协议的multipart的一个bug15886，顺着bug分析了下多块上传的流程。问题主要是多块上传中，如果有相同upload id的重传，就有可能丢数据，目前H版和J版都已修复，并在s3-tests的master分支添加了对应的测试用例test_multipart_resend_first_finishes_last。</summary></entry><entry><title>Fast 16年部分论文</title><link href="http://tianshan.github.io/fast-16/" rel="alternate" type="text/html" title="Fast 16年部分论文" /><published>2016-03-13T00:00:00+08:00</published><updated>2016-03-13T00:00:00+08:00</updated><id>http://tianshan.github.io/fast-16</id><content type="html" xml:base="http://tianshan.github.io/fast-16/">&lt;p&gt;Fast 16年的论文全集前段时间出来了，先读了EC相关的，其他的后面找时间读。
+全集地址：&lt;a href=&quot;https://www.usenix.org/conference/fast16/technical-sessions&quot;&gt;https://www.usenix.org/conference/fast16/technical-sessions&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;efficient-and-available-in-memory-kv-store-with-hybrid-erasure-coding-and-replication&quot;&gt;Efficient and Available In-memory KV-Store with Hybrid Erasure Coding and Replication&lt;/h3&gt;
+
+&lt;p&gt;内存KV系统，贡献一：元数据使用副本，保持高效访问，在数据部分失效时，还能提供访问。数据部分使用ec，节省空间。
+贡献二：online recovery，没看出来有啥特别的。。。可能是因为memcached没有提供复杂的恢复机制？
+贡献三：在Memcached中实现了上述
+他有个假设是后端还有持久化系统，所以我的理解，内存掉电时，如果不够恢复，那只能依靠其他了，这部分论文没有涉及。&lt;/p&gt;
+
+&lt;h3 id=&quot;opening-the-chrysalis-on-the-real-repair-performance-of-msr-codes&quot;&gt;Opening the Chrysalis: On the Real Repair Performance of MSR Codes&lt;/h3&gt;
+
+&lt;p&gt;主要网络编码在工业系统中的应用，实现在了HDFS（批量编码，类似HDFS-Raid）Ceph（在线编码），并比较了多项参数。
+网络编码
+相比普通EC能节省传输带宽。主要思想，一个节点会存储不止一个编码块（例如r个），修复时，会将本节点的多个编码块编码成一个，所以只要传输1/r存储大小。
+缺点，编码更复杂，计算开销也会上升。本片论文采用蝴蝶码，基于GF(2)，所以计算开销不高，只能容忍2块丢失（m固定为2，k任意），感觉有点类似Raid6。
+暂时还未找到公开代码。&lt;/p&gt;</content><author><name>tianshan</name><email>qutianshan0214@163.com</email></author><category term="论文" /><summary>Fast 16年的论文全集前段时间出来了，先读了EC相关的，其他的后面找时间读。
+全集地址：https://www.usenix.org/conference/fast16/technical-sessions</summary></entry><entry><title>读书笔记：深度探索C++对象模型</title><link href="http://tianshan.github.io/inside-the-c++-object-model/" rel="alternate" type="text/html" title="读书笔记：深度探索C++对象模型" /><published>2016-02-21T00:00:00+08:00</published><updated>2016-02-21T00:00:00+08:00</updated><id>http://tianshan.github.io/inside-the-c++-object-model</id><content type="html" xml:base="http://tianshan.github.io/inside-the-c++-object-model/">&lt;p&gt;该书是C++作者之一Lippman的心得之作，可以了解C++很多背后的故事，也可以更好的理解面向对象。Lippman同时也是C++ Primer的作者。&lt;/p&gt;
+
+&lt;!--more--&gt;
+
+&lt;p&gt;第一章：关于对象，印象比较深的是C++类的内存布局介绍，以及从继承，多态等角度比较了不同的内存布局。&lt;/p&gt;
+
+&lt;p&gt;第二章：构造函数语义学&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;第一部分，有4种情况，编译器会构造出有用的默认构造函数。
+    &lt;ul&gt;
+      &lt;li&gt;带有默认构造函数的类成员&lt;/li&gt;
+      &lt;li&gt;带有默认构造函数的基类&lt;/li&gt;
+      &lt;li&gt;带有虚函数的类，会初始化额外的指针（vptr）指向virtual function table（vtbl）&lt;/li&gt;
+      &lt;li&gt;带有虚基类的类，会初始化额外的指针（__vbcX）指向虚基类&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;第二部分，类似，分4种情况，编译器会构造默认的copy constructor&lt;/li&gt;
+  &lt;li&gt;第三部分，介绍了初始化时编译器可能会做的优化&lt;/li&gt;
+  &lt;li&gt;第四部分，介绍了构造函数的成员初始化列表&lt;/li&gt;
+&lt;/ul&gt;</content><author><name>tianshan</name><email>qutianshan0214@163.com</email></author><category term="book" /><summary>该书是C++作者之一Lippman的心得之作，可以了解C++很多背后的故事，也可以更好的理解面向对象。Lippman同时也是C++ Primer的作者。</summary></entry><entry><title>致2016</title><link href="http://tianshan.github.io/to-myself/" rel="alternate" type="text/html" title="致2016" /><published>2016-02-08T00:00:00+08:00</published><updated>2016-02-08T00:00:00+08:00</updated><id>http://tianshan.github.io/to-myself</id><content type="html" xml:base="http://tianshan.github.io/to-myself/">&lt;p&gt;又是除夕夜，从去年这时候开了博客，那时的新年愿望是坚持写博客，零零散散写了30篇，还挖了好多坑，算是完成了一半吧。今年愿望就是能坚持写些有质量的文章哈:)&lt;/p&gt;
+
+&lt;p&gt;简单回顾下2015。去年有缘加入了一家创业公司，也算正式进入存储行业，进入了ceph圈，认识了很多大牛。学了很多，做了很多，还有很多要去弥补，要更多的深入原理，多看基本经典书。&lt;/p&gt;
+
+&lt;p&gt;今年主要方向还在存储，主要是Ceph，有兴趣的可以一起讨论哈。最近贡献了Ceph的EC Overwrite模块，一些性能优化还没做好，本来要在Ceph Develop Mouthly要讨论下，然后很悲剧的话筒没调好，没能说上话。。。争取今年能够贡献更多核心模块，还得练好听力，不然赶不上老外的语速了。&lt;/p&gt;</content><author><name>tianshan</name><email>qutianshan0214@163.com</email></author><summary>又是除夕夜，从去年这时候开了博客，那时的新年愿望是坚持写博客，零零散散写了30篇，还挖了好多坑，算是完成了一半吧。今年愿望就是能坚持写些有质量的文章哈:)</summary></entry><entry><title>Ceph编译部署启动失败</title><link href="http://tianshan.github.io/ceph-deploy-mon-error/" rel="alternate" type="text/html" title="Ceph编译部署启动失败" /><published>2016-01-27T00:00:00+08:00</published><updated>2016-01-27T00:00:00+08:00</updated><id>http://tianshan.github.io/ceph-deploy-mon-error</id><content type="html" xml:base="http://tianshan.github.io/ceph-deploy-mon-error/">&lt;p&gt;Ceph编译安装经常会出现各种问题，这里记录下。&lt;/p&gt;
+
+&lt;p&gt;1.权限问题&lt;/p&gt;
+
+&lt;p&gt;默认ceph是以ceph用户启动的，可以查看&lt;code class=&quot;highlighter-rouge&quot;&gt;src/init-ceph&lt;/code&gt;，导致在root用户下用ceph-deploy部署时，mon不能起来。  &lt;br /&gt;
+还没部署前，可以直接修改ceph为root就可以了。已经部署失败后，因为service文件已经写好了，还要改一个地方。
+&lt;code class=&quot;highlighter-rouge&quot;&gt;ls /etc/systemd/system/ceph-mon.target.wants/&lt;/code&gt; 可以看到对应的文件为&lt;code class=&quot;highlighter-rouge&quot;&gt;/usr/lib/systemd/system/ceph-mon@.service&lt;/code&gt;，所以修改该文件中setuser和setgroup后的用户即可。&lt;/p&gt;
+
+&lt;p&gt;2.selinux&lt;/p&gt;
+
+&lt;p&gt;需要关闭，否则可能会遇到&lt;code class=&quot;highlighter-rouge&quot;&gt;filestore(/var/lib/ceph/tmp/mnt.icGL7K) mkjournal error creating journal on /var/lib/ceph/tmp/mnt.icGL7K/journal: (13) Permission denied&lt;/code&gt; 类似的错误&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;getenfoce       &lt;span class=&quot;c&quot;&gt;#查看当前设置&lt;/span&gt;
+setenforce 0    &lt;span class=&quot;c&quot;&gt;#临时设置&lt;/span&gt;
+
+永久设置，修改文件，然后重启
+/etc/selinux/config
+&lt;span class=&quot;nv&quot;&gt;SELINUX&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;disabled
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;3.动态链接库找不到&lt;/p&gt;
+
+&lt;p&gt;默认是安装在&lt;code class=&quot;highlighter-rouge&quot;&gt;/usr/local/bin&lt;/code&gt;，对应的库在&lt;code class=&quot;highlighter-rouge&quot;&gt;/usr/local/lib&lt;/code&gt;。 &lt;br /&gt;
+这种情况需要修改 &lt;code class=&quot;highlighter-rouge&quot;&gt;/etc/ld.so.conf&lt;/code&gt;，添加 &lt;code class=&quot;highlighter-rouge&quot;&gt;include /usr/local/lib&lt;/code&gt;，然后执行&lt;code class=&quot;highlighter-rouge&quot;&gt;ldconfig&lt;/code&gt; 重新加载库。  &lt;br /&gt;
+如果要临时设置，也可以&lt;code class=&quot;highlighter-rouge&quot;&gt;export LD_LIBRARY_PATH=/usr/local/lib&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;4.python文件找不到&lt;/p&gt;
+
+&lt;p&gt;问题同上，默认安装在&lt;code class=&quot;highlighter-rouge&quot;&gt;/usr/local/&lt;/code&gt;。在&lt;code class=&quot;highlighter-rouge&quot;&gt;.bashrc&lt;/code&gt;中添加python搜索路径，&lt;code class=&quot;highlighter-rouge&quot;&gt;export PYTHONPATH=$PYTHONPATH:/usr/local/lib/python2.7/site-packages/&lt;/code&gt;&lt;/p&gt;</content><author><name>tianshan</name><email>qutianshan0214@163.com</email></author><summary>Ceph编译安装经常会出现各种问题，这里记录下。</summary></entry><entry><title>Ceph EC代码分析(二)</title><link href="http://tianshan.github.io/ceph-ec-remove-object/" rel="alternate" type="text/html" title="Ceph EC代码分析(二)" /><published>2016-01-13T00:00:00+08:00</published><updated>2016-01-13T00:00:00+08:00</updated><id>http://tianshan.github.io/ceph-ec-remove-object</id><content type="html" xml:base="http://tianshan.github.io/ceph-ec-remove-object/">&lt;p&gt;Ceph EC常用的编码RS(k, m)，k块数据块，编码为m块校验块，可以容忍任意m块丢失。所以，为保证数据一致性，EC的写需要至少k块完成，才算写成功。
+Ceph为保证这样的一致性，引入了rollback机制，任意操作都是可回滚的，保证在出错时，能够恢复成上一个完整的版本。&lt;/p&gt;
+
+&lt;p&gt;本篇就对象删除的流程简单介绍下rollback机制，相对比较好理解。&lt;/p&gt;
+
+&lt;!--more--&gt;
+
+&lt;p&gt;rollback常见于数据库中，是对之前操作的撤销。Ceph中同样实现rollback机制，在EC对象的修改出错后，rollback对应的操作。&lt;/p&gt;
+
+&lt;p&gt;在PGLog中，每条pg_log_entry_t中有这样一个对象&lt;code class=&quot;highlighter-rouge&quot;&gt;ObjectModDesc&lt;/code&gt;，顾名思义记录了对象修改。
+代码在&lt;code class=&quot;highlighter-rouge&quot;&gt;src/osd/osd_types.h&lt;/code&gt;中，支持append, setattrs, rmobject, create, update_snaps几种操作的回滚。而对于副本对象或者不支持的一些操作，会直接&lt;code class=&quot;highlighter-rouge&quot;&gt;mark_unrollbackable&lt;/code&gt;。&lt;/p&gt;
+
+&lt;p&gt;每种操作记录如下&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;append：记录old_size，利用truncate回滚&lt;/li&gt;
+  &lt;li&gt;setattrs：记录old_attrs，直接覆盖回滚&lt;/li&gt;
+  &lt;li&gt;rmobject：记录deletion_version，删除的对象会先重命名为带版本的对象，回滚时再重命名回去，下面会详细讨论。&lt;/li&gt;
+  &lt;li&gt;create：直接删除就是回滚了。&lt;/li&gt;
+  &lt;li&gt;update_snaps：记录old_snaps，这个暂时不讨论。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;ObjectModDesc&lt;/code&gt;中还有一个&lt;code class=&quot;highlighter-rouge&quot;&gt;Visitor&lt;/code&gt;类，访问者模式，定义了回滚不同操作执行的接口。回滚类的实现，就定义在&lt;code class=&quot;highlighter-rouge&quot;&gt;PGBackend::RollbackVisitor&lt;/code&gt;，对每种操作，都会调用PGBackend的接口，来生成对应的回滚事务。下面主要讨论删除操作。&lt;/p&gt;
+
+&lt;p&gt;首先，删除对应OP类型为CEPH_OSD_OP_DELETE，在&lt;code class=&quot;highlighter-rouge&quot;&gt;ReplicatedPG::do_osd_ops&lt;/code&gt;中，然后调用&lt;code class=&quot;highlighter-rouge&quot;&gt;ReplicatedPG::_delete_oid&lt;/code&gt;，其中通过&lt;code class=&quot;highlighter-rouge&quot;&gt;pool.info.require_rollback()&lt;/code&gt;来判断是否需要回滚，也就是否是EC pool，回滚模式下，会调用stash，把对象重命名为当前版本的对象。&lt;/p&gt;
+
+&lt;p&gt;这里要提一下什么是带版本的对象，原本保存对象id的结构是hobject_t(代码在src/common/hojbect.h)，在引入EC后，同一个对象的不同OSD存储的数据是不一样的，但还是PG层复用的ReplicatedPG(这里不得不吐槽下混乱的PG层逻辑)，所以需要一个新的结构shard_id来区分不同的OSD，通过为了支持回滚操作，引入了对象版本的概念，所以增加了一个新的结构ghobject_t，来保存shard_id和version参数，然后还保存了一个hobject_t参数。然后在对象索引时，用的是hobject_t，在每个osd具体存储数据时，用的ghojbect_t。&lt;/p&gt;
+
+&lt;p&gt;下面看下被删除对象的两个去处。&lt;/p&gt;
+
+&lt;h3 id=&quot;section&quot;&gt;需要回滚的时候&lt;/h3&gt;
+&lt;p&gt;在集群状态发生变化的时候，pg会进入peering状态，然后发现pglog有不同时会merge日志，具体的函数为&lt;code class=&quot;highlighter-rouge&quot;&gt;PGLog::_merge_object_divergent_entries&lt;/code&gt;。其中，在发现自己比权威日志多出一部分时，就会把多出的日志添加到&lt;code class=&quot;highlighter-rouge&quot;&gt;PG::PGLogEntryHandler&lt;/code&gt;对象的&lt;code class=&quot;highlighter-rouge&quot;&gt;to_rollback&lt;/code&gt;列表中。然后在下次记录日志调用&lt;code class=&quot;highlighter-rouge&quot;&gt;PG::append_log&lt;/code&gt;时（比如下一次写操作），在&lt;code class=&quot;highlighter-rouge&quot;&gt;handler.apply(this, &amp;amp;t)&lt;/code&gt;函数中生成回滚事务。&lt;/p&gt;
+
+&lt;h3 id=&quot;section-1&quot;&gt;对象真正的删除&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;/images/2015-01-13-ceph-ec-remove-object.png&quot; alt=&quot;object-remove&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;上图描述了一个对象执行删除操作之后，真正删除时的流程。
+首先，对象真正的删除，是在删除对象的这条pglog要被剔除的时候。pglog保存的条数有两个参数配置，第一个&lt;code class=&quot;highlighter-rouge&quot;&gt;osd_min_pg_log_entries&lt;/code&gt;，pglog最少保存的条目数，默认3000；第二个&lt;code class=&quot;highlighter-rouge&quot;&gt;osd_max_pg_log_entries&lt;/code&gt;，pglog最多保存的条目数，默认10000。两个的区别是，在pg health情况下，pglog超过min条数，就会判断是否要删除，在pg降级或者处于恢复状态时，会从max开始判断。判断pglog的剔除，是在&lt;code class=&quot;highlighter-rouge&quot;&gt;ReplicatedPG::calc_trim_to&lt;/code&gt;，小于&lt;code class=&quot;highlighter-rouge&quot;&gt;min_last_complete_ondisk&lt;/code&gt;(表示还没有落盘的最小版本)的pglog都是可以trim的。&lt;/p&gt;
+
+&lt;p&gt;在每次提交事务前，都会调用calc_trim_to函数，判断是否要剔除，更新pg_trim_to，表示直到该版本的pglog都要执行trim。
+第二步在记录新log时，从上一次trim过的pglog开始往后扫描，直到pg_trim_to对应的版本，添加到&lt;code class=&quot;highlighter-rouge&quot;&gt;PG::PGLogEntryHandler&lt;/code&gt;中的&lt;code class=&quot;highlighter-rouge&quot;&gt;to_trim&lt;/code&gt;列表。
+第三部，调用真正的删除接口，&lt;code class=&quot;highlighter-rouge&quot;&gt;PGbackend::trim_stashed_object&lt;/code&gt;生成remove事务，包括在正常Op事务中，发送给ObjectStore，至此对象才会真正删除。
+以上是主OSD的流程。在主OSD给副OSD发送SubOp时，会把最新的pg_trim_to发送过去，副OSD收到后，会执行以上的2，3步。&lt;/p&gt;
+
+&lt;p&gt;EC相关的分析链接：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;&lt;a href=&quot;/ceph-erasure-code-analysis-1/&quot;&gt;EC的读&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ceph-ec-remove-object/&quot;&gt;EC删除对象的流程&lt;/a&gt;&lt;/li&gt;
+&lt;/ol&gt;</content><author><name>tianshan</name><email>qutianshan0214@163.com</email></author><category term="ceph" /><summary>Ceph EC常用的编码RS(k, m)，k块数据块，编码为m块校验块，可以容忍任意m块丢失。所以，为保证数据一致性，EC的写需要至少k块完成，才算写成功。
+Ceph为保证这样的一致性，引入了rollback机制，任意操作都是可回滚的，保证在出错时，能够恢复成上一个完整的版本。</summary></entry><entry><title>Ceph Rados的测试：load-gen</title><link href="http://tianshan.github.io/rados-load-gen/" rel="alternate" type="text/html" title="Ceph Rados的测试：load-gen" /><published>2016-01-07T00:00:00+08:00</published><updated>2016-01-07T00:00:00+08:00</updated><id>http://tianshan.github.io/rados-load-gen</id><content type="html" xml:base="http://tianshan.github.io/rados-load-gen/">&lt;p&gt;对Ceph的性能测试，常见的有fio测试rbd，而对rados的直接测试，可以通过&lt;code class=&quot;highlighter-rouge&quot;&gt;rados bench&lt;/code&gt;命令，本篇介绍另外一个命令&lt;code class=&quot;highlighter-rouge&quot;&gt;rados load-gen&lt;/code&gt;&lt;/p&gt;
+
+&lt;!--more--&gt;
+
+&lt;p&gt;相关代码在&lt;code class=&quot;highlighter-rouge&quot;&gt;src/tools/rados/rados.cc&lt;/code&gt;，整体流程是这样的&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;1. LoadGen lg(&amp;amp;rados);      // 实例化测试类
+2. lg.bootstrap(pool_name); // 生成初始的测试对象
+    生成指定个数和随机大小的测试对象，然后写入pool，实际只会在len位置写入1B（例如：需要生成1024B的对象，实际会在off=1024的位置写1B，相当于占了1024的空间），应该是为了快速生成，但这样的话就不能测试EC pool，可以通过修改源码来支持。
+3. lg.run();                // 测试过程
+    循环生成op提交
+4. lg.cleanup();            // 清理生成的对象
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;cp&quot;&gt;#生成next op的主要代码
+&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;LoadGen&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;gen_op&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;LoadGenOp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;op&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// 随机选取生成好的对象
+&lt;/span&gt;  &lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;get_random&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;objs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;obj_info&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;info&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;objs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;op&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;oid&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;info&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// 随机生成长度
+&lt;/span&gt;  &lt;span class=&quot;kt&quot;&gt;size_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;len&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;get_random&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;min_op_len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;max_op_len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;len&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;info&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;len&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;info&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// 随机生成偏移
+&lt;/span&gt;  &lt;span class=&quot;kt&quot;&gt;size_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;off&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;get_random&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;info&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;off&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;len&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;info&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;off&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;info&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;len&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+  &lt;span class=&quot;n&quot;&gt;op&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;off&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;off&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;op&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;len&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// 随机生成读或写
+&lt;/span&gt;  &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;get_random&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;100&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;read_percent&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;op&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;type&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP_WRITE&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;op&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;type&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP_READ&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;再来看参数设置&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;--num-objects           初始生成测试用的对象数，默认 200
+--min-object-size       测试对象的最小大小，默认 1KB，单位byte 
+--max-object-size       测试对象的最大大小，默认 5GB，单位byte
+
+--min-op-len            压测IO的最小大小，默认 1KB，单位byte
+--max-op-len            压测IO的最大大小，默认 2MB，单位byte
+--max-ops               一次提交的最大IO数，相当于iodepth
+--target-throughput     一次提交IO的历史累计吞吐量上限，默认 5MB/s，单位B/s
+--max-backlog           一次提交IO的吞吐量上限，默认10MB/s，单位B/s
+--read-percent          读写混合中读的比例，默认80，范围[0, 100]
+
+--run-length            运行的时间，默认60s，单位秒
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;一个典型的用例&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c&quot;&gt;# 测试4KB写，iodepth=64，速度不限&lt;/span&gt;
+rados -p rbd load-gen --num-objects 128 --min-object-size 8192 --max-object-size 8192 --run-length 20 --read-percent 0 --min-op-len 4096 --max-op-len 4096 --target-throughput 104857600 --max_backlog 104857600 --max-ops 64
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;整体的流程和rados bench差不多，但是支持跟丰富的测试语义。&lt;/p&gt;</content><author><name>tianshan</name><email>qutianshan0214@163.com</email></author><category term="ceph" /><summary>对Ceph的性能测试，常见的有fio测试rbd，而对rados的直接测试，可以通过rados bench命令，本篇介绍另外一个命令rados load-gen</summary></entry><entry><title>Ceph EC的代码分析(一)</title><link href="http://tianshan.github.io/ceph-erasure-code-analysis-1/" rel="alternate" type="text/html" title="Ceph EC的代码分析(一)" /><published>2015-12-03T00:00:00+08:00</published><updated>2015-12-03T00:00:00+08:00</updated><id>http://tianshan.github.io/ceph-erasure-code-analysis-1</id><content type="html" xml:base="http://tianshan.github.io/ceph-erasure-code-analysis-1/">&lt;p&gt;传统的存储可靠性都是用多副本实现，但是很多大容量备份场景、多媒体内容存储等，多副本的存储成本已经不能忍受，ErasureCode是通用的解决方案，而且这些场景往往是一次写多次读，很适合EC的特点。&lt;/p&gt;
+
+&lt;p&gt;ErasureCode可以用1.5副本就实现丢失任意两块都可以恢复出原始数据，但EC也有很明显的缺点，修复数据代价太大，这个以后再讨论。&lt;/p&gt;
+
+&lt;p&gt;Ceph的EC目前支持append写，为丰富接口，对接nfs等，最近就在实现EC的overwrite，所以就从EC的角度，分析一下Ceph的PG层逻辑。&lt;/p&gt;
+
+&lt;!--more--&gt;
+
+&lt;h3 id=&quot;placemeng-group&quot;&gt;Placemeng Group&lt;/h3&gt;
+
+&lt;p&gt;PG全称Placement Group， 用于对象的第一层逻辑聚合，对象到PG的映射就是oid的一次取模，这层映射是不变的，所以当OSD变动时，不会导致大量元数据的变动。&lt;/p&gt;
+
+&lt;p&gt;PG层代码，主要有&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;osd/PG&lt;/code&gt; 定义了PG层的接口&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;osd/ReplicatedPG&lt;/code&gt; 副本模式的接口实现&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;在引入EC后，复用了ReplicagePG部分逻辑，所以引入了PGBackend的新接口，用于实现Replicated和EC不同的逻辑。这样的设计，导致现在的PG层逻辑相当混乱，有些会调用PG接口，有写会调用Replicated接口，阅读代码会很困惑。从Loïc Dachary的&lt;a href=&quot;http://dachary.org/?p=2320&quot;&gt;博客&lt;/a&gt;可以看到Loïc在设计EC时和Sam对PG的讨论。目前Sam在对PG那块的代码进行重构，未来逻辑应该会清晰。&lt;/p&gt;
+
+&lt;p&gt;下面就EC的几个典型操作，分析下这层的逻辑。&lt;/p&gt;
+
+&lt;h3 id=&quot;cephec&quot;&gt;Ceph的EC逻辑&lt;/h3&gt;
+
+&lt;p&gt;EC写，是client发送数据到主OSD，然后编码数据生成ObjectStore的Transaction，然后发送SubOp到对应的副OSD，都reply后，会回调完成。&lt;/p&gt;
+
+&lt;p&gt;EC读，逻辑简单一点，因为读数据需要读取多个副OSD的数据，所以EC只支持异步读。同样，client发送Op到主OSD，主OSD在生成SubReadOp，所有SubReadReply后，回调complete函数，解码并返回给client。&lt;/p&gt;
+
+&lt;p&gt;yahoo在前几个提了一个patch，实现了fast_read，其实就是避免了OSD短板，每次发送读请求给所有OSD，然后取先返回的k个OSD数据解码。读需要等所有数据返回后再解码，在长时间使用过程中，HDD会有性能下降，所以读Op速度取决于k个osd中最慢的那个。从&lt;a href=&quot;http://tracker.ceph.com/projects/ceph/wiki/Tail_latency_improvements&quot;&gt;CDS_Jewel&lt;/a&gt;可以看到，初步实验结果，fast read可以提升30%性能，但集群负载也会提高。&lt;/p&gt;
+
+&lt;p&gt;EC read的流程如下，相对比较简单&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;因为ec read需要多个osd的数据，所以只支持异步读。&lt;/li&gt;
+  &lt;li&gt;EC是条带写的，所以读之前，会把读的范围，通过&lt;code class=&quot;highlighter-rouge&quot;&gt;ECUtil::stripe_info_t.offset_len_to_stripe_bounds&lt;/code&gt;转换成对应每个osd需要读的范围。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;img src=&quot;/images/2015-12-03-ec-read.png&quot; alt=&quot;ec read&quot; width=&quot;75%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;EC相关的分析链接：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;&lt;a href=&quot;/ceph-erasure-code-analysis-1/&quot;&gt;EC的读&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/ceph-ec-remove-object/&quot;&gt;EC删除对象的流程&lt;/a&gt;&lt;/li&gt;
+&lt;/ol&gt;</content><author><name>tianshan</name><email>qutianshan0214@163.com</email></author><category term="ceph" /><category term="ErasureCode" /><summary>传统的存储可靠性都是用多副本实现，但是很多大容量备份场景、多媒体内容存储等，多副本的存储成本已经不能忍受，ErasureCode是通用的解决方案，而且这些场景往往是一次写多次读，很适合EC的特点。</summary></entry><entry><title>Ceph中EC的对齐</title><link href="http://tianshan.github.io/ceph-erasure-code-alignment/" rel="alternate" type="text/html" title="Ceph中EC的对齐" /><published>2015-11-23T00:00:00+08:00</published><updated>2015-11-23T00:00:00+08:00</updated><id>http://tianshan.github.io/ceph-erasure-code-alignment</id><content type="html" xml:base="http://tianshan.github.io/ceph-erasure-code-alignment/">&lt;p&gt;ErasureCode应用在存储中的是满足MDS性质的线性分组码，最常用的是Reed Solomon编码。 将一份数据切成K块数据块，然后编码成M块校验块，放到K+M个OSD上，可以容忍任意M块丢失。&lt;/p&gt;
+
+&lt;p&gt;Ceph的EC支持主要是Loïc Dachary实现的。具体的PG层逻辑，复用了ReplicatedPG，写数据前的准备工作，都是在主OSD完成。
+编码的工作由对应的plugin完成，可以很灵活的实现自己的编码。Plugin的选用是在创建ecpool时的ecprofile中指定的，具体的设置可以参考&lt;a href=&quot;http://docs.ceph.com/docs/master/rados/operations/erasure-code/&quot;&gt;官网&lt;/a&gt;。&lt;/p&gt;
+
+&lt;p&gt;已有的Plugin是Jerasure，Intel ISA，LRC，SHEL，前两者是采用硬件加速的编码库，后两者是基于RS改进的编码方案，主要改进了修复的效率和占用的资源。&lt;/p&gt;
+
+&lt;!--more--&gt;
+
+&lt;p&gt;目前Ceph不支持EC的偏移写，只能writefull，或者offset要满足是strip_width的倍数，且正好是原始对象的末尾，所以最终都会转换成一个AppendOp。&lt;/p&gt;
+
+&lt;p&gt;编码的流程&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-C++&quot;&gt;// ECTransaction::TransGenerator
+void operator()(const ECTransaction::AppendOp &amp;amp;op)
+
+// 每次编码的buf大小是stripe_width=K*chunk_size，循环编码
+ECUtil::encode(sinfo, ecimpl, bl, want, &amp;amp;buffers);
+
+// ECPlugin实现的编码过程
+ecimpl-&amp;gt;encode(want, buf, &amp;amp;encoded);
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;其中，chunk_size也是每个osd上要存的数据量，就是一次要对齐的大小，再来看chunk_size是怎么来的。&lt;/p&gt;
+
+&lt;p&gt;ECBackend中有这样一个变量，&lt;code class=&quot;highlighter-rouge&quot;&gt;ECUtil::stripe_info_t sinfo&lt;/code&gt;，sinfo包含变量stripe_width。
+sinfo是在ECBackend构造的时候实例化的。&lt;/p&gt;
+
+&lt;p&gt;实例化过程&lt;/p&gt;
+
+&lt;p&gt;OSDMonitor::prepare_new_pool -&amp;gt; prepare_pool_stripe_width&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;ErasureCodeInterfaceRef&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;erasure_code&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;// 实例化ecprofile定义的ECPlugin
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_erasure_code&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;erasure_code_profile&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;erasure_code&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ss&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;// 用户期望的条带大小，读取配置文件的选项 osd_pool_erasure_code_stripe_width
+&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;uint32_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;desired_stripe_width&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;g_conf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;osd_pool_erasure_code_stripe_width&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;// 调用ECPlugin的函数来获取条带大小
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;stripe_width&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;erasure_code&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_data_chunk_count&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;erasure_code&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_chunk_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;desired_stripe_width&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;不同的ECPlugin会有不同的条带大小，下面主要分析下Jerasure为例。get_chunk_size的对齐过程&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;p&gt;调用&lt;code class=&quot;highlighter-rouge&quot;&gt;alignment = get_alignment()&lt;/code&gt;返回ECPlugin实现的编码本身需要的对齐长度，就是一次矩阵运算需要的byte数&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;然后根据对齐长度，使object_size满足为alignment的整数倍&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;如果per_chunk_alignment为true，会使每个chunk大小都是alignment的整数倍。默认false&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;详细代码&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;ErasureCodeJerasure&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_chunk_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;object_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;kt&quot;&gt;unsigned&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;alignment&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;get_alignment&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;per_chunk_alignment&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;kt&quot;&gt;unsigned&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;chunk_size&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;object_size&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;/&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;object_size&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;%&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;chunk_size&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;kt&quot;&gt;unsigned&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;modulo&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;chunk_size&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;%&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;alignment&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;modulo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;chunk_size&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;alignment&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;modulo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;chunk_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;kt&quot;&gt;unsigned&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tail&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;object_size&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;%&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;alignment&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;kt&quot;&gt;unsigned&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;padded_length&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;object_size&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tail&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;?&lt;/span&gt;  &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;alignment&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tail&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;padded_length&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;/&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;// Jerasure支持不同的编码方案，会有部分差别，这只是一个例子
+&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;unsigned&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ErasureCodeJerasureLiberation&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_alignment&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;const&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// k: data chunk数
+&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;// w: 一次编码的字长，也是有限域运算的位长，默认为8。GF(2^8)上的运算可以查表
+&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;// packetsize: 一次编码组的个数
+&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;// sizeof(int): jerasure是把数据存在int中的，所以要对齐int
+&lt;/span&gt;  &lt;span class=&quot;kt&quot;&gt;unsigned&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;alignment&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;w&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;packetsize&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;sizeof&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// LARGEST_VECTOR_WORDSIZE 的作用未知
+&lt;/span&gt;  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;w&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;packetsize&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;sizeof&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;%&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;LARGEST_VECTOR_WORDSIZE&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;alignment&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;k&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;w&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;packetsize&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;LARGEST_VECTOR_WORDSIZE&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;alignment&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;总结，不同的编码本身会有不同的编码要求，跟踪get_chunk_size和get_alignment函数可以得到，了解对齐原理后合理设置参数，才能使编码性能提高。
+每次编码都会prepare逻辑，object_size过小，会频繁prepare，导致性能下降。&lt;/p&gt;</content><author><name>tianshan</name><email>qutianshan0214@163.com</email></author><category term="ceph" /><category term="ErasureCode" /><summary>ErasureCode应用在存储中的是满足MDS性质的线性分组码，最常用的是Reed Solomon编码。 将一份数据切成K块数据块，然后编码成M块校验块，放到K+M个OSD上，可以容忍任意M块丢失。</summary></entry><entry><title>Ceph读写流程分析二</title><link href="http://tianshan.github.io/ceph-read-write-op/" rel="alternate" type="text/html" title="Ceph读写流程分析二" /><published>2015-11-09T00:00:00+08:00</published><updated>2015-11-09T00:00:00+08:00</updated><id>http://tianshan.github.io/ceph-read-write-op</id><content type="html" xml:base="http://tianshan.github.io/ceph-read-write-op/">&lt;p&gt;&lt;a href=&quot;/ceph-readwrite/&quot;&gt;上一节&lt;/a&gt;分析了整体的读写流程，这节主要理一下OP出队过程中，主OSD上ReplicatePG-&amp;gt;do_osd_op的过程。&lt;/p&gt;
+
+&lt;p&gt;读OP：OSD_OP_READ&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/images/2015-11-09-do_osd_op_read.png&quot; alt=&quot;OSD_OP_READ&quot; width=&quot;40%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;写OP：OSD_OP_WRITE&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/images/2015-11-09-do_osd_op_write.png&quot; alt=&quot;OSD_OP_WRITE&quot; /&gt;&lt;/p&gt;</content><author><name>tianshan</name><email>qutianshan0214@163.com</email></author><category term="ceph" /><summary>上一节分析了整体的读写流程，这节主要理一下OP出队过程中，主OSD上ReplicatePG-&amp;gt;do_osd_op的过程。</summary></entry></feed>
