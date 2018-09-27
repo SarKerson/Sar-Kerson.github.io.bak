@@ -11,4 +11,4 @@ Multipart是客户端发起的一个分块上传的协议。首先是一个POST�
 
 测试的用例是，先写A，然后以重传形式写B，然后complet B，再完成A。这时实际对象内容应该是A。在B写入时，发现upload id相同的分片存在，就会重新生成临时upload id，保证不重复，所以B也就是一个临时对象，最后complete的A为实际对象内容。
 
-![Ceph RGW Multipart 流程图]({{site.imageurl}}/2016-07-11-ceph-rgw-multipart.png)
+![Ceph RGW Multipart 流程图](https://timgsa.baidu.com/timg?image&quality=80&size=b9999_10000&sec=1538671666&di=b3266cb42754beea4b0248683a050667&imgtype=jpg&er=1&src=http%3A%2F%2Fimgsrc.baidu.com%2Fimgad%2Fpic%2Fitem%2F80cb39dbb6fd5266cdfabd2fa018972bd4073633.jpg)
